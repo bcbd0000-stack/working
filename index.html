@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>工時記帳本</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap">
+<style>
+html{-webkit-text-size-adjust:100%}
+
+/* Layout: single narrow column, bottom-free tab strip on top; admin tab appears only for the owner. */
+:root{
+  --bg:#F3F4F1; --surface:#FFFFFF; --fg:#1B221F; --muted:#5F6B65; --line:#D9DED9;
+  --accent:#2B6B63; --accent-fg:#FFFFFF; --warm:#B4532A; --soft:#E5EEEC; --bad:#A8322B;
+  --body:"Noto Sans TC",system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+  --mono:"DM Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121716; --surface:#1A2120; --fg:#E7ECEA; --muted:#98A7A2; --line:#2B3633;
+  --accent:#5FB5A9; --accent-fg:#0E1514; --warm:#E08A5F; --soft:#1F2D2B; --bad:#E27A72; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121716; --surface:#1A2120; --fg:#E7ECEA; --muted:#98A7A2; --line:#2B3633;
+  --accent:#5FB5A9; --accent-fg:#0E1514; --warm:#E08A5F; --soft:#1F2D2B; --bad:#E27A72; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.5;
+  padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{font-size:20px;margin:0}
+h2{font-size:13px;letter-spacing:.08em;color:var(--muted);margin:0 0 8px;font-weight:500}
+.sub{color:var(--muted);font-size:13px}
+.tabs{display:flex;gap:4px;background:var(--soft);padding:4px;border-radius:10px}
+.tabs button{flex:1;border:0;background:transparent;color:var(--muted);font:inherit;padding:8px 4px;border-radius:7px;cursor:pointer;min-width:0}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--fg);font-weight:700}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row>*{min-width:0}
+.big{font-family:var(--mono);font-size:34px;font-weight:500;letter-spacing:.02em}
+button.p,button.s{font:inherit;border-radius:9px;padding:10px 14px;cursor:pointer;border:1px solid var(--accent)}
+button.p{background:var(--accent);color:var(--accent-fg);font-weight:700}
+button.s{background:transparent;color:var(--accent)}
+button.out{background:var(--warm);border-color:var(--warm)}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input,select{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.stat{background:var(--soft);border-radius:10px;padding:10px}
+.stat b{display:block;font-family:var(--mono);font-size:20px;font-weight:500}
+.list{display:flex;flex-direction:column}
+.item{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line);align-items:center}
+.item:first-child{border-top:0}
+.item .l{min-width:0}.item .l small{display:block;color:var(--muted)}
+.x{border:0;background:transparent;color:var(--muted);cursor:pointer;font:inherit;padding:4px 8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:99px;padding:6px 12px;font:inherit;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.empty{color:var(--muted);padding:6px 0}
+.note{font-size:12px;color:var(--muted)}
+.err{color:var(--bad)}
+.banner{background:var(--soft);border-radius:10px;padding:12px;font-size:13px}
+[hidden]{display:none!important}
+</style></head><body>
+
+<main id="app">
+  <div>
+    <h1>工時記帳本</h1>
+    <div class="sub" id="who">本機版</div>
+  </div>
+  <div class="banner" id="privacy">資料只存在這支手機的瀏覽器裡，沒有上傳到任何地方。換手機或清除瀏覽器資料前，請先到「設定」做備份。</div>
+  <nav class="tabs" role="tablist" id="tabs">
+    <button role="tab" data-t="clock" aria-selected="true">打卡</button>
+    <button role="tab" data-t="exp" aria-selected="false">記帳</button>
+    <button role="tab" data-t="sum" aria-selected="false">總覽</button>
+    <button role="tab" data-t="set" aria-selected="false">設定</button>
+  </nav>
+
+  <section id="p-clock" class="panel">
+    <div class="card">
+      <div class="big" id="now">--:--</div>
+      <div class="sub" id="todayInfo">今天還沒打卡</div>
+      <div class="row" style="margin-top:12px">
+        <button class="p" id="btnIn">上班打卡</button>
+        <button class="p out" id="btnOut">下班打卡</button>
+        <button class="s" id="btnNoLunch" aria-pressed="false">今天不扣午餐</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>補登或修改</h2>
+      <div class="row">
+        <label>日期<input type="date" id="mDate"></label>
+        <label>上班<input type="time" id="mIn"></label>
+        <label>下班<input type="time" id="mOut"></label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="mNoLunch"> 不扣午餐</label>
+        <button class="s" id="mSave">儲存</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>最近紀錄</h2>
+      <div class="list" id="dayList"></div>
+    </div>
+  </section>
+
+  <section id="p-exp" class="panel" hidden>
+    <div class="card">
+      <h2>新增支出</h2>
+      <div class="row">
+        <label style="flex:1">金額<input type="number" inputmode="decimal" step="0.01" id="eAmt" placeholder="0"></label>
+        <label>日期<input type="date" id="eDate"></label>
+      </div>
+      <div style="margin-top:10px"><div class="sub" style="margin-bottom:6px">分類</div><div class="chips" id="eCats"></div></div>
+      <label style="margin-top:10px">備註（可空白）<input type="text" id="eNote" maxlength="60"></label>
+      <div class="row" style="margin-top:12px"><button class="p" id="eSave">記下來</button><span class="sub" id="eMsg"></span></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>最近支出</h2>
+      <div class="list" id="expList"></div>
+    </div>
+  </section>
+
+  <section id="p-sum" class="panel" hidden>
+    <div class="card">
+      <h2>工時</h2>
+      <div class="stats" id="hStats"></div>
+      <div class="list" id="weekList" style="margin-top:8px"></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>支出</h2>
+      <div class="stats" id="eStats"></div>
+      <div class="list" id="catList" style="margin-top:8px"></div>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <button class="s" id="dlHours">下載工時表</button>
+      <button class="s" id="dlExp">下載支出表</button>
+    </div>
+    <div class="note" id="dlNote">下載的是 CSV，Excel 可以直接打開。</div>
+  </section>
+
+  <section id="p-set" class="panel" hidden>
+    <div class="card">
+      <h2>我的設定</h2>
+      <div class="row">
+        <label>時薪<input type="number" inputmode="decimal" step="0.5" id="sRate" placeholder="不填就不算金額"></label>
+        <label>自動扣午餐（分鐘）<input type="number" step="15" min="0" max="120" id="sLunch"></label>
+      </div>
+      <label style="margin-top:10px">兩週結算的起始週一<input type="date" id="sAnchor"></label>
+      <div class="row" style="margin-top:12px"><button class="p" id="sSave">儲存設定</button><span class="sub" id="sMsg"></span></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>備份</h2>
+      <div class="row"><button class="s" id="bkOut">匯出備份檔</button><label class="s" style="border:1px solid var(--accent);border-radius:9px;padding:10px 14px;cursor:pointer;color:var(--accent);flex-direction:row">匯入備份<input type="file" id="bkIn" accept=".json" hidden></label></div>
+      <div class="note" id="bkMsg" style="margin-top:8px">備份檔是 JSON，存到雲端硬碟或傳給自己。匯入會取代目前的資料。</div>
+    </div>
+    <div class="card note" style="margin-top:16px">
+      計時規則：以 15 分鐘為單位。上班超過整刻度 5 分鐘以上，從下一個刻度算起；下班只算整刻度。每天自動扣午餐，勾「不扣午餐」可略過。
+    </div>
+  </section>
+
+</main>
+
+<script>
+const $=s=>document.querySelector(s);
+const CATS={"娛樂費":["外食","聚餐","娛樂","購物","其他娛樂"],"生活消費":["超市日用","交通油費","房租","手機網路","餐飲","其他生活"]};
+const pad=n=>String(n).padStart(2,"0");
+const ymd=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const parse=s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)};
+const toMin=t=>{const [h,m]=t.split(":").map(Number);return h*60+m};
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
+const monday=d=>{const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()-((x.getDay()+6)%7));return x};
+const fmt=h=>(Math.round(h*100)/100).toString();
+const money=v=>"$"+(Math.round(v*100)/100).toLocaleString("en-US");
+let lunchMin=30;
+function hoursOf(r,lunch){
+  if(!r||!r.in||!r.out) return null;
+  let a=toMin(r.in),q=a%15; a=q<=5?a-q:a-q+15;
+  let b=toMin(r.out); b-=b%15;
+  let m=b-a; if(m<0) m = toMin(r.out)<toMin(r.in) ? m+1440 : 0;
+  if(!r.noLunch) m-=lunch;
+  return Math.max(0,m/60);
+}
+let profile={rate:null,lunch:30,anchor:null},days={},exps={},cat=null;
+
+/* tabs */
+function showTab(t){
+  document.querySelectorAll(".panel").forEach(p=>p.hidden=p.id!=="p-"+t);
+  document.querySelectorAll("#tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.t===t));
+  if(t==="sum") renderSum(); if(t==="adm") loadAdmin();
+}
+$("#tabs").addEventListener("click",e=>{const b=e.target.closest("button");if(b)showTab(b.dataset.t)});
+
+/* clock */
+function tick(){const d=new Date();$("#now").textContent=pad(d.getHours())+":"+pad(d.getMinutes())}
+setInterval(tick,15000);tick();
+const nowHM=()=>{const d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes())};
+const today=()=>ymd(new Date());
+function saveDay(date,patch){
+  const cur=days[date]||{};const rec={...cur,...patch};
+  days[date]=rec;renderClock();
+  return persist();
+}
+$("#btnIn").onclick=()=>saveDay(today(),{in:nowHM()});
+$("#btnOut").onclick=()=>saveDay(today(),{out:nowHM()});
+$("#btnNoLunch").onclick=()=>saveDay(today(),{noLunch:!(days[today()]||{}).noLunch});
+$("#mSave").onclick=()=>{
+  const d=$("#mDate").value;if(!d)return;
+  const rec={noLunch:$("#mNoLunch").checked};
+  if($("#mIn").value)rec.in=$("#mIn").value; if($("#mOut").value)rec.out=$("#mOut").value;
+  days[d]=rec;renderClock();persist();
+};
+function renderClock(){
+  const t=days[today()]||{};const h=hoursOf(t,lunchMin);
+  $("#todayInfo").textContent=t.in?("上班 "+t.in+(t.out?"　下班 "+t.out:"　還沒下班")+(h!=null?"　今天 "+fmt(h)+" 小時":"")):"今天還沒打卡";
+  $("#btnNoLunch").setAttribute("aria-pressed",!!t.noLunch);
+  $("#btnNoLunch").textContent=t.noLunch?"今天不扣午餐（已開）":"今天不扣午餐";
+  const keys=Object.keys(days).sort().reverse().slice(0,14);
+  $("#dayList").innerHTML=keys.length?"":'<div class="empty">還沒有紀錄。按上方「上班打卡」開始。</div>';
+  keys.forEach(k=>{
+    const r=days[k],hh=hoursOf(r,lunchMin);
+    const el=document.createElement("div");el.className="item";
+    el.innerHTML='<div class="l"><b class="num"></b><small></small></div><div class="row"><span class="num"></span><button class="x" aria-label="編輯">編輯</button><button class="x" aria-label="刪除">刪除</button></div>';
+    el.querySelector("b").textContent=k;
+    el.querySelector("small").textContent=(r.in||"--")+" → "+(r.out||"--")+(r.noLunch?"（不扣午餐）":"");
+    el.querySelector(".row span").textContent=hh==null?"—":fmt(hh)+" h";
+    const [ed,del]=el.querySelectorAll(".x");
+    ed.onclick=()=>{$("#mDate").value=k;$("#mIn").value=r.in||"";$("#mOut").value=r.out||"";$("#mNoLunch").checked=!!r.noLunch;$("#mDate").scrollIntoView({block:"center"})};
+    del.onclick=()=>{delete days[k];renderClock();persist()};
+    $("#dayList").appendChild(el);
+  });
+}
+
+/* expenses */
+function renderCats(){
+  const box=$("#eCats");box.innerHTML="";
+  for(const [g,list] of Object.entries(CATS)) for(const c of list){
+    const b=document.createElement("button");b.className="chip";b.textContent=c;b.dataset.g=g;
+    b.setAttribute("aria-pressed",cat&&cat.c===c);
+    b.onclick=()=>{cat={g,c};renderCats()};box.appendChild(b);
+  }
+}
+$("#eSave").onclick=()=>{
+  const amt=parseFloat($("#eAmt").value);
+  if(!(amt>0)){$("#eMsg").textContent="請輸入金額";return}
+  if(!cat){$("#eMsg").textContent="請選分類";return}
+  const id="exp-"+Date.now();
+  const rec={date:$("#eDate").value||today(),amt,group:cat.g,cat:cat.c,note:$("#eNote").value.trim()};
+  exps[id]=rec;renderExp();persist();
+  $("#eAmt").value="";$("#eNote").value="";$("#eMsg").textContent="已記下 "+money(amt);
+};
+function renderExp(){
+  const keys=Object.keys(exps).sort((a,b)=>exps[b].date.localeCompare(exps[a].date)||b.localeCompare(a)).slice(0,20);
+  $("#expList").innerHTML=keys.length?"":'<div class="empty">還沒有支出。輸入金額、選分類就能記。</div>';
+  keys.forEach(k=>{
+    const r=exps[k];const el=document.createElement("div");el.className="item";
+    el.innerHTML='<div class="l"><b></b><small></small></div><div class="row"><span class="num"></span><button class="x">刪除</button></div>';
+    el.querySelector("b").textContent=r.cat;
+    el.querySelector("small").textContent=r.date+(r.note?"　"+r.note:"");
+    el.querySelector("span").textContent=money(r.amt);
+    el.querySelector(".x").onclick=()=>{delete exps[k];renderExp();persist()};
+    $("#expList").appendChild(el);
+  });
+}
+
+/* summary */
+function weekTotals(dayMap,lunch){
+  const w={};
+  for(const [k,r] of Object.entries(dayMap)){const h=hoursOf(r,lunch);if(h==null)continue;
+    const m=ymd(monday(parse(k)));w[m]=(w[m]||0)+h}
+  return w;
+}
+function renderSum(){
+  const w=weekTotals(days,lunchMin),rate=profile.rate;
+  const thisW=ymd(monday(new Date())),lastW=ymd(addDays(monday(new Date()),-7));
+  let periodH=0,periodLabel="";
+  if(profile.anchor){
+    const a=parse(profile.anchor),diff=Math.floor((monday(new Date())-a)/(14*864e5));
+    const s=addDays(a,Math.max(0,diff)*14);periodLabel="本期（"+ymd(s)+" 起兩週）";
+    periodH=(w[ymd(s)]||0)+(w[ymd(addDays(s,7))]||0);
+  }
+  const st=[["本週",w[thisW]||0],["上週",w[lastW]||0]];
+  if(profile.anchor)st.push([periodLabel,periodH]);
+  $("#hStats").innerHTML=st.map(([l,h])=>'<div class="stat"><span class="sub">'+l+'</span><b>'+fmt(h)+' h</b>'+(rate?'<span class="sub num">'+money(h*rate)+'</span>':'')+'</div>').join("");
+  const ks=Object.keys(w).sort().reverse().slice(0,8);
+  $("#weekList").innerHTML=ks.length?"":'<div class="empty">還沒有完整的上下班紀錄。</div>';
+  ks.forEach(k=>{const el=document.createElement("div");el.className="item";
+    el.innerHTML='<span class="num"></span><span class="num"></span>';
+    el.children[0].textContent="週 "+k;el.children[1].textContent=fmt(w[k])+" h"+(rate?"　"+money(w[k]*rate):"");
+    $("#weekList").appendChild(el)});
+  const now=new Date(),mp=now.getFullYear()+"-"+pad(now.getMonth()+1);
+  let tm=0,tw=0;const byCat={};
+  for(const r of Object.values(exps)){
+    if(r.date.startsWith(mp)){tm+=r.amt;byCat[r.group+"・"+r.cat]=(byCat[r.group+"・"+r.cat]||0)+r.amt}
+    if(ymd(monday(parse(r.date)))===thisW)tw+=r.amt;
+  }
+  $("#eStats").innerHTML='<div class="stat"><span class="sub">本週</span><b>'+money(tw)+'</b></div><div class="stat"><span class="sub">本月</span><b>'+money(tm)+'</b></div>';
+  const cs=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+  $("#catList").innerHTML=cs.length?"":'<div class="empty">本月還沒有支出。</div>';
+  cs.forEach(([k,v])=>{const el=document.createElement("div");el.className="item";el.innerHTML='<span></span><span class="num"></span>';
+    el.children[0].textContent=k;el.children[1].textContent=money(v);$("#catList").appendChild(el)});
+}
+function dl(name,rows){
+  const csv="\ufeff"+rows.map(r=>r.map(c=>'"'+String(c??"").replace(/"/g,'""')+'"').join(",")).join("\r\n");
+  saveFile(name,csv,"text/csv;charset=utf-8");
+}
+$("#dlHours").onclick=()=>dl("工時表.csv",[["日期","上班","下班","不扣午餐","小時"],...Object.keys(days).sort().map(k=>[k,days[k].in,days[k].out,days[k].noLunch?"是":"",hoursOf(days[k],lunchMin)??""])]);
+$("#dlExp").onclick=()=>dl("支出表.csv",[["日期","大類","分類","金額","備註"],...Object.entries(exps).sort((a,b)=>a[1].date.localeCompare(b[1].date)).map(([k,r])=>[r.date,r.group,r.cat,r.amt,r.note])]);
+
+/* settings */
+$("#sSave").onclick=()=>{
+  const rate=parseFloat($("#sRate").value),lunch=parseInt($("#sLunch").value,10);
+  profile={rate:rate>0?rate:null,lunch:lunch>=0?lunch:30,anchor:$("#sAnchor").value||null};
+  lunchMin=profile.lunch;$("#sMsg").textContent="已儲存";renderClock();
+  persist();
+};
+function fillSettings(){
+  $("#sRate").value=profile.rate??"";$("#sLunch").value=profile.lunch;$("#sAnchor").value=profile.anchor||"";
+}
+
+/* storage: this device only */
+const KEY="gongshi-jizhang-v1";
+function persist(){try{localStorage.setItem(KEY,JSON.stringify({profile,days,exps}))}catch(e){$("#bkMsg").textContent="這個瀏覽器不能儲存資料（可能是無痕模式）。"}}
+function load(){try{const d=JSON.parse(localStorage.getItem(KEY)||"null");if(d){profile={rate:null,lunch:30,anchor:null,...d.profile};days=d.days||{};exps=d.exps||{}}}catch(e){}lunchMin=profile.lunch??30}
+function saveFile(name,text,type){const b=new Blob([text],{type});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
+$("#bkOut").onclick=()=>saveFile("工時記帳備份-"+today()+".json",JSON.stringify({profile,days,exps}),"application/json");
+$("#bkIn").onchange=async e=>{const f=e.target.files[0];if(!f)return;
+  try{const d=JSON.parse(await f.text());if(!d||typeof d!=="object"||!d.days||!d.exps)throw 0;
+    profile={rate:null,lunch:30,anchor:null,...d.profile};days=d.days;exps=d.exps;lunchMin=profile.lunch??30;persist();fillSettings();renderClock();renderExp();$("#bkMsg").textContent="已匯入。"}
+  catch(x){$("#bkMsg").textContent="這不是有效的備份檔。"}e.target.value=""};
+load();$("#eDate").value=today();$("#mDate").value=today();renderCats();renderClock();renderExp();fillSettings();
+</script>
+</body></html>
