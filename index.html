@@ -65,6 +65,21 @@ label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mute
 .err{color:var(--bad)}
 .banner{background:var(--soft);border-radius:10px;padding:12px;font-size:13px}
 [hidden]{display:none!important}
+
+.pcard .big{font-family:var(--mono);font-size:30px;font-weight:500}
+.chartwrap{display:flex;align-items:stretch}.cscroll{flex:1;min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+#axis{flex:none;width:44px;height:240px}#plot{height:240px;display:block}
+#plot .hit{fill:transparent;cursor:pointer;outline:none}#plot .hit:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+#plot .band{fill:var(--soft)}#plot text.sel{fill:var(--fg);font-weight:700}
+svg text{fill:var(--muted);font-family:var(--mono);font-size:11px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px;min-width:480px}
+th{color:var(--muted);font-weight:500;text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}tr.cur td{background:var(--soft);font-weight:500}
+.pos{color:var(--accent)}.neg{color:var(--bad)}
+textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-height:150px}
 </style></head><body>
 
 <main id="app">
@@ -126,20 +141,18 @@ label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mute
   </section>
 
   <section id="p-sum" class="panel" hidden>
-    <div class="card">
-      <h2>結算期</h2>
-      <div class="row" style="justify-content:space-between;flex-wrap:nowrap">
-        <button class="s" id="pPrev" aria-label="上一期">◀</button>
-        <div style="text-align:center;min-width:0"><b class="num" id="pLabel"></b><div class="sub" id="pSub"></div></div>
-        <button class="s" id="pNext" aria-label="下一期">▶</button>
-      </div>
-      <div class="stats" id="pStats" style="margin-top:10px"></div>
-      <div class="row" style="margin-top:12px">
-        <label>自訂起<input type="date" id="rFrom"></label>
-        <label>到<input type="date" id="rTo"></label>
-      </div>
-      <div class="stats" id="rStats" style="margin-top:10px"></div>
-    </div>
+    <div class="card pcard" id="payCard"></div>
+    <div class="card" style="margin-top:16px"><h2>本期進行中</h2><div class="stats" id="curStats"></div><div class="note" id="curNote" style="margin-top:8px"></div></div>
+    <div class="card" style="margin-top:16px"><h2>每期收入與支出</h2>
+      <div class="stats" id="readout" aria-live="polite"></div>
+      <div class="note" id="roNote" style="margin:6px 0 4px"></div>
+      <div class="chartwrap"><svg id="axis" aria-hidden="true"></svg><div class="cscroll" id="cscroll"><svg id="plot" role="img" aria-label="每期收入與支出長條圖，點選一期看明細"></svg></div></div>
+      <div class="legend"><span><i style="background:var(--accent)"></i>收入</span><span><i style="background:var(--warm)"></i>支出</span><span>點任一期看明細，左右滑動看更早的</span></div></div>
+    <div class="card" style="margin-top:16px"><h2>各期明細</h2><div class="scroll"><table id="ptable"></table></div>
+      <div class="note" style="margin-top:8px" id="ptNote">收入是時數乘時薪（稅前）。設定頁填了時薪才會算收入。</div></div>
+    <div class="card" style="margin-top:16px"><h2>自訂區間</h2>
+      <div class="row"><label>起<input type="date" id="rFrom"></label><label>到<input type="date" id="rTo"></label></div>
+      <div class="stats" id="rStats" style="margin-top:10px"></div></div>
     <div class="card" style="margin-top:16px">
       <h2>工時</h2>
       <div class="stats" id="hStats"></div>
@@ -168,13 +181,21 @@ label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mute
         <label>結算週期<select id="sCycle"><option value="two">每兩週</option><option value="week">每週</option><option value="month">每月（1 號到月底）</option></select></label>
         <label id="anchorBox">任選一期的起始日<input type="date" id="sAnchor"></label>
       </div>
-      <div class="note" style="margin-top:6px">每兩週：選任何一個你的結算期第一天，之後每 14 天一期。每週從週一算起。</div>
+      <div class="row" style="margin-top:10px"><label>發薪日在期末後幾天<input type="number" id="sLag" min="0" max="31" placeholder="5"></label></div>
+      <div class="note" style="margin-top:6px">每兩週：選任何一個你的結算期第一天，之後每 14 天一期。每週從週一算起。例：結算期到週日、發薪日在下週五，就填 5。</div>
       <div class="row" style="margin-top:12px"><button class="p" id="sSave">儲存設定</button><span class="sub" id="sMsg"></span></div>
     </div>
     <div class="card" style="margin-top:16px">
       <h2>備份</h2>
       <div class="row"><button class="s" id="bkOut">匯出備份檔</button><label class="s" style="border:1px solid var(--accent);border-radius:9px;padding:10px 14px;cursor:pointer;color:var(--accent);flex-direction:row">匯入備份<input type="file" id="bkIn" accept=".json" hidden></label></div>
       <div class="note" id="bkMsg" style="margin-top:8px">備份檔是 JSON，存到雲端硬碟或傳給自己。匯入會取代目前的資料。</div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h2>使用統計（自願分享）</h2>
+      <div class="note">想讓我知道哪些功能好用，可以按下面產生一段文字。裡面只有「次數」，沒有金額、時間、備註內容。你看過覺得可以，再自己複製傳給我；不傳也完全沒關係。</div>
+      <div class="row" style="margin-top:10px"><button class="s" id="stGen">產生統計文字</button><button class="s" id="stCopy" hidden>複製</button></div>
+      <textarea id="stText" readonly hidden style="margin-top:10px"></textarea>
+      <div class="note" id="stMsg" style="margin-top:6px"></div>
     </div>
     <div class="card note" style="margin-top:16px">
       計時規則：以 15 分鐘為單位。上班超過整刻度 5 分鐘以上，從下一個刻度算起；下班只算整刻度。每天自動扣午餐，勾「不扣午餐」可略過。
@@ -203,13 +224,15 @@ function hoursOf(r,lunch){
   if(!r.noLunch) m-=lunch;
   return Math.max(0,m/60);
 }
-let profile={rate:null,lunch:30,anchor:null},days={},exps={},cat=null;
+let profile={rate:null,lunch:30,anchor:null,lag:5},days={},exps={},cat=null;
+let stats={first:null,open:{},c:{},cats:{}};
+function track(k,n){stats.c[k]=(stats.c[k]||0)+(n||1)}
 
 /* tabs */
 function showTab(t){
   document.querySelectorAll(".panel").forEach(p=>p.hidden=p.id!=="p-"+t);
   document.querySelectorAll("#tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.t===t));
-  if(t==="sum") renderSum(); if(t==="adm") loadAdmin();
+  track("tab_"+t);if(t==="sum") renderSum();persist();
 }
 $("#tabs").addEventListener("click",e=>{const b=e.target.closest("button");if(b)showTab(b.dataset.t)});
 
@@ -223,14 +246,14 @@ function saveDay(date,patch){
   days[date]=rec;renderClock();
   return persist();
 }
-$("#btnIn").onclick=()=>saveDay(today(),{in:nowHM()});
-$("#btnOut").onclick=()=>saveDay(today(),{out:nowHM()});
-$("#btnNoLunch").onclick=()=>saveDay(today(),{noLunch:!(days[today()]||{}).noLunch});
+$("#btnIn").onclick=()=>{track("clockIn");saveDay(today(),{in:nowHM()})};
+$("#btnOut").onclick=()=>{track("clockOut");saveDay(today(),{out:nowHM()})};
+$("#btnNoLunch").onclick=()=>{track("noLunch");saveDay(today(),{noLunch:!(days[today()]||{}).noLunch})};
 $("#mSave").onclick=()=>{
   const d=$("#mDate").value;if(!d)return;
   const rec={noLunch:$("#mNoLunch").checked};
   if($("#mIn").value)rec.in=$("#mIn").value; if($("#mOut").value)rec.out=$("#mOut").value;
-  days[d]=rec;renderClock();persist();
+  track("manualDay");days[d]=rec;renderClock();persist();
 };
 function renderClock(){
   const t=days[today()]||{};const h=hoursOf(t,lunchMin);
@@ -248,7 +271,7 @@ function renderClock(){
     el.querySelector(".row span").textContent=hh==null?"—":fmt(hh)+" h";
     const [ed,del]=el.querySelectorAll(".x");
     ed.onclick=()=>{$("#mDate").value=k;$("#mIn").value=r.in||"";$("#mOut").value=r.out||"";$("#mNoLunch").checked=!!r.noLunch;$("#mDate").scrollIntoView({block:"center"})};
-    del.onclick=()=>{delete days[k];renderClock();persist()};
+    del.onclick=()=>{track("deleteDay");delete days[k];renderClock();persist()};
     $("#dayList").appendChild(el);
   });
 }
@@ -268,7 +291,7 @@ $("#eSave").onclick=()=>{
   if(!cat){$("#eMsg").textContent="請選分類";return}
   const id="exp-"+Date.now();
   const rec={date:$("#eDate").value||today(),amt,group:cat.g,cat:cat.c,note:$("#eNote").value.trim()};
-  exps[id]=rec;renderExp();persist();
+  track("expense");if(rec.note)track("expenseNote");stats.cats[rec.cat]=(stats.cats[rec.cat]||0)+1;exps[id]=rec;renderExp();persist();
   $("#eAmt").value="";$("#eNote").value="";$("#eMsg").textContent="已記下 "+money(amt);
 };
 function renderExp(){
@@ -280,7 +303,7 @@ function renderExp(){
     el.querySelector("b").textContent=r.cat;
     el.querySelector("small").textContent=r.date+(r.note?"　"+r.note:"");
     el.querySelector("span").textContent=money(r.amt);
-    el.querySelector(".x").onclick=()=>{delete exps[k];renderExp();persist()};
+    el.querySelector(".x").onclick=()=>{track("deleteExp");delete exps[k];renderExp();persist()};
     $("#expList").appendChild(el);
   });
 }
@@ -292,32 +315,103 @@ function weekTotals(dayMap,lunch){
     const m=ymd(monday(parse(k)));w[m]=(w[m]||0)+h}
   return w;
 }
-let pOff=0;
 const dayHours=(a,b)=>{let h=0,n=0;for(const [k,r] of Object.entries(days)){if(k>=ymd(a)&&k<=ymd(b)){const x=hoursOf(r,lunchMin);if(x!=null){h+=x;n++}}}return {h,n}};
-function periodOf(off){
-  const t=new Date(),cyc=profile.cycle||"two";
-  if(cyc==="month"){const s=new Date(t.getFullYear(),t.getMonth()+off,1);return [s,new Date(s.getFullYear(),s.getMonth()+1,0)]}
-  if(cyc==="week"){const s=addDays(monday(t),off*7);return [s,addDays(s,6)]}
-  const a=profile.anchor?parse(profile.anchor):monday(t);
-  const k=Math.floor((new Date(t.getFullYear(),t.getMonth(),t.getDate())-a)/(14*864e5))+off;
+const statBox=(l,h)=>'<div class="stat"><span class="sub">'+l+'</span><b>'+fmt(h)+' h</b>'+(profile.rate?'<span class="sub num">'+money(h*profile.rate)+'</span>':'')+'</div>';
+const mdd=x=>x.slice(5).replace("-","/");
+const moneyS=v=>(v<0?"-":"")+"$"+Math.abs(Math.round(v*100)/100).toLocaleString("en-US");
+function earliest(){const d=[...Object.keys(days),...Object.values(exps).map(r=>r.date)].filter(Boolean).sort();return d[0]?parse(d[0]):new Date()}
+function periodOfDate(d){
+  const cyc=profile.cycle||"two";
+  if(cyc==="month")return [new Date(d.getFullYear(),d.getMonth(),1),new Date(d.getFullYear(),d.getMonth()+1,0)];
+  if(cyc==="week"){const s=monday(d);return [s,addDays(s,6)]}
+  const a=profile.anchor?parse(profile.anchor):monday(earliest());
+  const k=Math.floor((new Date(d.getFullYear(),d.getMonth(),d.getDate())-a)/(14*864e5));
   const s=addDays(a,k*14);return [s,addDays(s,13)];
 }
-const statBox=(l,h,n)=>'<div class="stat"><span class="sub">'+l+'</span><b>'+fmt(h)+' h</b>'+(profile.rate?'<span class="sub num">'+money(h*profile.rate)+'</span>':'')+'</div>';
-function renderPeriod(){
-  const [s,e]=periodOf(pOff),r=dayHours(s,e);
-  $("#pLabel").textContent=ymd(s)+" ～ "+ymd(e);
-  $("#pSub").textContent=pOff===0?"本期":(pOff<0?Math.abs(pOff)+" 期前":pOff+" 期後");
-  $("#pStats").innerHTML=statBox("工時合計",r.h)+'<div class="stat"><span class="sub">上班天數</span><b>'+r.n+' 天</b></div>';
-  const f=$("#rFrom").value,t=$("#rTo").value;
-  if(f&&t&&f<=t){const q=dayHours(parse(f),parse(t));$("#rStats").innerHTML=statBox("自訂區間",q.h)+'<div class="stat"><span class="sub">上班天數</span><b>'+q.n+' 天</b></div>'}else $("#rStats").innerHTML='<div class="note">選好起訖日，這裡會顯示該區間的工時和金額。</div>';
+function allPeriods(){
+  const lag=profile.lag??5,out=[],rate=profile.rate||0,tEnd=periodOfDate(new Date())[1];
+  let [s,e]=periodOfDate(earliest());
+  for(let n=0;n<400&&s<=tEnd;n++){
+    const r=dayHours(s,e),ex=Object.values(exps).reduce((t,x)=>x.date>=ymd(s)&&x.date<=ymd(e)?t+x.amt:t,0);
+    const inc=r.h*rate;
+    out.push({s:ymd(s),e:ymd(e),pay:ymd(addDays(e,lag)),h:r.h,n:r.n,inc,ex,rem:inc-ex});
+    [s,e]=periodOfDate(addDays(e,1));
+  }
+  return out;
 }
-$("#pPrev").onclick=()=>{pOff--;renderPeriod()};$("#pNext").onclick=()=>{pOff++;renderPeriod()};
-$("#rFrom").onchange=$("#rTo").onchange=renderPeriod;
+let selKey=null;const NS="http://www.w3.org/2000/svg";
+function showReadout(p,t){
+  const has=!!profile.rate;
+  $("#roNote").textContent=mdd(p.s)+" ～ "+mdd(p.e)+(p.e>=t&&p.s<=t?"（進行中）":"")+"，發薪日 "+mdd(p.pay);
+  $("#readout").innerHTML='<div class="stat"><span class="sub">時數</span><b>'+fmt(p.h)+' h</b></div>'
+    +'<div class="stat"><span class="sub">收入</span><b style="color:var(--accent)">'+(has?moneyS(p.inc):"—")+'</b></div>'
+    +'<div class="stat"><span class="sub">支出</span><b style="color:var(--warm)">'+moneyS(p.ex)+'</b></div>'
+    +'<div class="stat"><span class="sub">剩餘</span><b class="'+(has&&p.rem<0?"neg":"pos")+'">'+(has?moneyS(p.rem):"—")+'</b></div>';
+}
+let chartScrolled=false;
+function drawChart(P,t){
+  if(!P.length){$("#readout").innerHTML='<div class="empty">還沒有資料。先打卡或記一筆帳，這裡就會出現。</div>';$("#roNote").textContent="";$("#axis").innerHTML="";$("#plot").innerHTML="";return}
+  if(!selKey||!P.some(p=>p.s===selKey))selKey=P[P.length-1].s;
+  const H=240,T=16,B=34,ih=H-T-B,colW=60,data=P;
+  const mx=Math.max(1,...data.flatMap(p=>[p.inc,p.ex]));
+  const nice=v=>{const m=Math.pow(10,Math.floor(Math.log10(v)));const f=v/m;return (f<=1?1:f<=2?2:f<=5?5:10)*m};
+  const top=nice(mx),y=v=>T+ih-(v/top)*ih,Wp=Math.max(data.length*colW+8,240);
+  const el=(n,at,tx)=>{const e=document.createElementNS(NS,n);for(const k in at)e.setAttribute(k,at[k]);if(tx!=null)e.textContent=tx;return e};
+  const ax=$("#axis"),pl=$("#plot");ax.innerHTML="";pl.innerHTML="";
+  ax.setAttribute("viewBox","0 0 44 "+H);pl.setAttribute("viewBox","0 0 "+Wp+" "+H);pl.setAttribute("width",Wp);
+  for(let i=0;i<=4;i++){const v=top*i/4,yy=y(v);
+    ax.appendChild(el("text",{x:40,y:yy+4,"text-anchor":"end"},v>=1000?(v/1000)+"k":(Math.round(v*100)/100)));
+    pl.appendChild(el("line",{x1:0,x2:Wp,y1:yy,y2:yy,stroke:"var(--line)"}));}
+  const band=el("rect",{class:"band",x:0,y:T-6,width:colW-4,height:ih+B-2,rx:8});pl.appendChild(band);
+  const labels={};
+  const select=(key,fromUser)=>{selKey=key;const i=data.findIndex(p=>p.s===key);band.setAttribute("x",i*colW+2);
+    for(const k in labels)labels[k].setAttribute("class",k===key?"sel":"");showReadout(data[i],t);if(fromUser)track("chartTap")};
+  data.forEach((p,i)=>{
+    const x0=i*colW,cur=(p.s<=t&&p.e>=t),bw=(colW-22)/2,xi=x0+11,xe=xi+bw+2;
+    pl.appendChild(el("rect",{x:xi,y:y(p.inc),width:bw,height:Math.max(0,T+ih-y(p.inc)),rx:2,fill:"var(--accent)",opacity:cur?0.6:1}));
+    pl.appendChild(el("rect",{x:xe,y:y(p.ex),width:bw,height:Math.max(0,T+ih-y(p.ex)),rx:2,fill:"var(--warm)",opacity:cur?0.6:1}));
+    const lb=el("text",{x:x0+colW/2,y:H-12,"text-anchor":"middle"},mdd(p.s)+(cur?"*":""));pl.appendChild(lb);labels[p.s]=lb;
+    const h=el("rect",{class:"hit",x:x0,y:0,width:colW,height:H,tabindex:0,role:"button","aria-label":p.s+" 到 "+p.e+" 這一期"});
+    const pick=()=>{if(selKey!==p.s)select(p.s,true)};
+    h.addEventListener("click",pick);h.addEventListener("pointerenter",e=>{if(e.pointerType==="mouse")pick()});
+    h.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();pick()}});pl.appendChild(h);
+  });
+  select(selKey,false);
+  const sc=$("#cscroll");sc.scrollLeft=sc.scrollWidth;
+}
+function renderPayAndTable(){
+  const P=allPeriods(),t=today(),has=!!profile.rate;
+  const nextPay=P.find(p=>p.pay>=t)||null,lastPaid=P.filter(p=>p.pay<t&&p.e<t).pop()||null,cur=P.find(p=>t>=p.s&&t<=p.e);
+  const rel=p=>{const dd=Math.round((parse(p.pay)-parse(t))/864e5);return dd===0?"就是今天":(dd>0?dd+" 天後":"已過去 "+(-dd)+" 天")};
+  const card=$("#payCard");
+  if(nextPay){const fin=nextPay.e<t;
+    card.innerHTML='<h2>'+(nextPay.pay===t?"今天發薪":"下一次發薪日")+'</h2><div class="big">'+mdd(nextPay.pay)+'</div>'
+     +'<div class="sub">'+rel(nextPay)+'　領 '+mdd(nextPay.s)+' ～ '+mdd(nextPay.e)+(fin?"":"（還在累積中）")+'</div>'
+     +'<div class="stats" style="margin-top:10px"><div class="stat"><span class="sub">'+(fin?"這期時數":"目前時數")+'</span><b>'+fmt(nextPay.h)+' h</b></div><div class="stat"><span class="sub">'+(fin?"這期金額（稅前）":"目前金額（稅前）")+'</span><b>'+(has?moneyS(nextPay.inc):"—")+'</b></div></div>'
+     +(has?'':'<div class="note" style="margin-top:8px">到「設定」填時薪，這裡就會算出金額。</div>')
+     +(lastPaid?'<div class="note" style="margin-top:8px">上一次 '+mdd(lastPaid.pay)+' 發薪：'+fmt(lastPaid.h)+' h'+(has?'，'+moneyS(lastPaid.inc):'')+'</div>':'');
+  }else card.innerHTML='<h2>發薪日</h2><div class="empty">還沒有資料。先打卡幾天，這裡會算出發薪日和金額。</div>';
+  if(cur){$("#curStats").innerHTML='<div class="stat"><span class="sub">已累積時數</span><b>'+fmt(cur.h)+' h</b></div><div class="stat"><span class="sub">已累積收入</span><b>'+(has?moneyS(cur.inc):"—")+'</b></div><div class="stat"><span class="sub">已花支出</span><b>'+moneyS(cur.ex)+'</b></div><div class="stat"><span class="sub">剩餘</span><b class="'+(has&&cur.rem<0?"neg":"pos")+'">'+(has?moneyS(cur.rem):"—")+'</b></div>';
+    $("#curNote").textContent="期間 "+cur.s+" ～ "+cur.e+"，發薪日 "+cur.pay}
+  else{$("#curStats").innerHTML='<div class="empty">今天不在任何結算期內。</div>';$("#curNote").textContent=""}
+  drawChart(P,t);
+  const tb=$("#ptable");tb.innerHTML='<tr><th>期間</th><th>發薪日</th><th>時數</th><th>收入</th><th>支出</th><th>剩餘</th></tr>';
+  P.slice().reverse().forEach(p=>{const tr=document.createElement("tr");tr.className=(p.s<=t&&p.e>=t)?"cur":"";
+    tr.innerHTML='<td></td><td></td><td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td>';const c=tr.children;
+    c[0].textContent=mdd(p.s)+"～"+mdd(p.e);c[1].textContent=mdd(p.pay);c[2].textContent=fmt(p.h);c[3].textContent=has?moneyS(p.inc):"—";c[4].textContent=moneyS(p.ex);c[5].textContent=has?moneyS(p.rem):"—";if(has&&p.rem<0)c[5].className="num neg";
+    tb.appendChild(tr)});
+}
+function renderRange(){
+  const f=$("#rFrom").value,t=$("#rTo").value;
+  if(f&&t&&f<=t){const q=dayHours(parse(f),parse(t));$("#rStats").innerHTML=statBox("自訂區間",q.h)+'<div class="stat"><span class="sub">上班天數</span><b>'+q.n+' 天</b></div>'}
+  else $("#rStats").innerHTML='<div class="note">選好起訖日，這裡會顯示該區間的工時和金額。</div>';
+}
+$("#rFrom").onchange=$("#rTo").onchange=()=>{track("customRange");renderRange()};
 function renderSum(){
   const w=weekTotals(days,lunchMin),rate=profile.rate;
   const thisW=ymd(monday(new Date())),lastW=ymd(addDays(monday(new Date()),-7));
   const st=[["本週",w[thisW]||0],["上週",w[lastW]||0]];
-  renderPeriod();
+  renderPayAndTable();renderRange();
   $("#hStats").innerHTML=st.map(([l,h])=>'<div class="stat"><span class="sub">'+l+'</span><b>'+fmt(h)+' h</b>'+(rate?'<span class="sub num">'+money(h*rate)+'</span>':'')+'</div>').join("");
   const ks=Object.keys(w).sort().reverse().slice(0,8);
   $("#weekList").innerHTML=ks.length?"":'<div class="empty">還沒有完整的上下班紀錄。</div>';
@@ -341,31 +435,48 @@ function dl(name,rows){
   const csv="\ufeff"+rows.map(r=>r.map(c=>'"'+String(c??"").replace(/"/g,'""')+'"').join(",")).join("\r\n");
   saveFile(name,csv,"text/csv;charset=utf-8");
 }
-$("#dlHours").onclick=()=>dl("工時表.csv",[["日期","上班","下班","不扣午餐","小時"],...Object.keys(days).sort().map(k=>[k,days[k].in,days[k].out,days[k].noLunch?"是":"",hoursOf(days[k],lunchMin)??""])]);
-$("#dlExp").onclick=()=>dl("支出表.csv",[["日期","大類","分類","金額","備註"],...Object.entries(exps).sort((a,b)=>a[1].date.localeCompare(b[1].date)).map(([k,r])=>[r.date,r.group,r.cat,r.amt,r.note])]);
+$("#dlHours").onclick=()=>track("dlHours")||dl("工時表.csv",[["日期","上班","下班","不扣午餐","小時"],...Object.keys(days).sort().map(k=>[k,days[k].in,days[k].out,days[k].noLunch?"是":"",hoursOf(days[k],lunchMin)??""])]);
+$("#dlExp").onclick=()=>track("dlExp")||dl("支出表.csv",[["日期","大類","分類","金額","備註"],...Object.entries(exps).sort((a,b)=>a[1].date.localeCompare(b[1].date)).map(([k,r])=>[r.date,r.group,r.cat,r.amt,r.note])]);
 
 /* settings */
 $("#sSave").onclick=()=>{
   const rate=parseFloat($("#sRate").value),lunch=parseInt($("#sLunch").value,10);
-  profile={rate:rate>0?rate:null,lunch:lunch>=0?lunch:30,anchor:$("#sAnchor").value||null,cycle:$("#sCycle").value};pOff=0;
+  const lg=parseInt($("#sLag").value,10);track("saveSettings");profile={rate:rate>0?rate:null,lunch:lunch>=0?lunch:30,anchor:$("#sAnchor").value||null,cycle:$("#sCycle").value,lag:lg>=0?lg:5};
   lunchMin=profile.lunch;$("#sMsg").textContent="已儲存";renderClock();
   persist();
 };
 $("#sCycle").onchange=()=>{$("#anchorBox").hidden=$("#sCycle").value!=="two"};
 function fillSettings(){
-  $("#sRate").value=profile.rate??"";$("#sLunch").value=profile.lunch;$("#sAnchor").value=profile.anchor||"";$("#sCycle").value=profile.cycle||"two";$("#anchorBox").hidden=(profile.cycle||"two")!=="two";
+  $("#sRate").value=profile.rate??"";$("#sLunch").value=profile.lunch;$("#sAnchor").value=profile.anchor||"";$("#sLag").value=profile.lag??5;$("#sCycle").value=profile.cycle||"two";$("#anchorBox").hidden=(profile.cycle||"two")!=="two";
 }
 
 /* storage: this device only */
 const KEY="gongshi-jizhang-v1";
-function persist(){try{localStorage.setItem(KEY,JSON.stringify({profile,days,exps}))}catch(e){$("#bkMsg").textContent="這個瀏覽器不能儲存資料（可能是無痕模式）。"}}
-function load(){try{const d=JSON.parse(localStorage.getItem(KEY)||"null");if(d){profile={rate:null,lunch:30,anchor:null,...d.profile};days=d.days||{};exps=d.exps||{}}}catch(e){}lunchMin=profile.lunch??30}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify({profile,days,exps,stats}))}catch(e){$("#bkMsg").textContent="這個瀏覽器不能儲存資料（可能是無痕模式）。"}}
+function load(){try{const d=JSON.parse(localStorage.getItem(KEY)||"null");if(d){profile={rate:null,lunch:30,anchor:null,lag:5,...d.profile};days=d.days||{};exps=d.exps||{};if(d.stats)stats={first:null,open:{},c:{},cats:{},...d.stats}}}catch(e){}lunchMin=profile.lunch??30}
 function saveFile(name,text,type){const b=new Blob([text],{type});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
-$("#bkOut").onclick=()=>saveFile("工時記帳備份-"+today()+".json",JSON.stringify({profile,days,exps}),"application/json");
-$("#bkIn").onchange=async e=>{const f=e.target.files[0];if(!f)return;
+$("#bkOut").onclick=()=>track("backupOut")||saveFile("工時記帳備份-"+today()+".json",JSON.stringify({profile,days,exps}),"application/json");
+$("#bkIn").onchange=async e=>{const f=e.target.files[0];if(!f)return;track("backupIn");
   try{const d=JSON.parse(await f.text());if(!d||typeof d!=="object"||!d.days||!d.exps)throw 0;
-    profile={rate:null,lunch:30,anchor:null,...d.profile};days=d.days;exps=d.exps;lunchMin=profile.lunch??30;persist();fillSettings();renderClock();renderExp();$("#bkMsg").textContent="已匯入。"}
+    profile={rate:null,lunch:30,anchor:null,lag:5,...d.profile};days=d.days;exps=d.exps;lunchMin=profile.lunch??30;persist();fillSettings();renderClock();renderExp();$("#bkMsg").textContent="已匯入。"}
   catch(x){$("#bkMsg").textContent="這不是有效的備份檔。"}e.target.value=""};
-load();$("#eDate").value=today();$("#mDate").value=today();renderCats();renderClock();renderExp();fillSettings();
+function usageText(){
+  const t=today(),open=Object.keys(stats.open).sort(),c=stats.c,d30=open.filter(k=>k>=ymd(addDays(new Date(),-29))).length;
+  const top=Object.entries(stats.cats).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>k+" "+v+" 次").join("、")||"無";
+  const tabs=["clock","exp","sum","set"].map(k=>({clock:"打卡",exp:"記帳",sum:"總覽",set:"設定"}[k])+" "+(c["tab_"+k]||0)).join("、");
+  return ["工時記帳本 使用統計（只有次數，沒有金額、時間、備註內容）",
+   "第一次使用："+(stats.first||"—")+"　使用天數："+open.length+"（最近 30 天 "+d30+" 天）",
+   "上班打卡 "+(c.clockIn||0)+" 次、下班打卡 "+(c.clockOut||0)+" 次、補登修改 "+(c.manualDay||0)+" 次、不扣午餐 "+(c.noLunch||0)+" 次",
+   "記帳 "+(c.expense||0)+" 筆，其中有填備註 "+(c.expenseNote||0)+" 筆；刪除打卡 "+(c.deleteDay||0)+" 次、刪除支出 "+(c.deleteExp||0)+" 次",
+   "最常用的分類（只有分類名稱）："+top,
+   "分頁開啟次數："+tabs,
+   "圖表點選 "+(c.chartTap||0)+" 次、自訂區間 "+(c.customRange||0)+" 次、下載 "+((c.dlHours||0)+(c.dlExp||0))+" 次、備份 "+(c.backupOut||0)+" 次",
+   "有設定時薪："+(profile.rate?"是":"否")+"　結算週期："+({two:"每兩週",week:"每週",month:"每月"}[profile.cycle||"two"])].join("\n");
+}
+$("#stGen").onclick=()=>{const ta=$("#stText");ta.value=usageText();ta.hidden=false;$("#stCopy").hidden=false;$("#stMsg").textContent="請先看過內容，確定可以再複製傳給我。"};
+$("#stCopy").onclick=async()=>{const ta=$("#stText");try{await navigator.clipboard.writeText(ta.value);$("#stMsg").textContent="已複製，可以貼給我了。"}catch(e){ta.focus();ta.select();$("#stMsg").textContent="自動複製失敗，已幫你選取，請手動複製。"}};
+load();
+if(!stats.first)stats.first=today();stats.open[today()]=1;persist();
+$("#eDate").value=today();$("#mDate").value=today();renderCats();renderClock();renderExp();fillSettings();
 </script>
 </body></html>
