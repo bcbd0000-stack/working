@@ -119,6 +119,20 @@ label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mute
 
   <section id="p-sum" class="panel" hidden>
     <div class="card">
+      <h2>結算期</h2>
+      <div class="row" style="justify-content:space-between;flex-wrap:nowrap">
+        <button class="s" id="pPrev" aria-label="上一期">◀</button>
+        <div style="text-align:center;min-width:0"><b class="num" id="pLabel"></b><div class="sub" id="pSub"></div></div>
+        <button class="s" id="pNext" aria-label="下一期">▶</button>
+      </div>
+      <div class="stats" id="pStats" style="margin-top:10px"></div>
+      <div class="row" style="margin-top:12px">
+        <label>自訂起<input type="date" id="rFrom"></label>
+        <label>到<input type="date" id="rTo"></label>
+      </div>
+      <div class="stats" id="rStats" style="margin-top:10px"></div>
+    </div>
+    <div class="card" style="margin-top:16px">
       <h2>工時</h2>
       <div class="stats" id="hStats"></div>
       <div class="list" id="weekList" style="margin-top:8px"></div>
@@ -142,7 +156,11 @@ label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mute
         <label>時薪<input type="number" inputmode="decimal" step="0.5" id="sRate" placeholder="不填就不算金額"></label>
         <label>自動扣午餐（分鐘）<input type="number" step="15" min="0" max="120" id="sLunch"></label>
       </div>
-      <label style="margin-top:10px">兩週結算的起始週一<input type="date" id="sAnchor"></label>
+      <div class="row" style="margin-top:10px">
+        <label>結算週期<select id="sCycle"><option value="two">每兩週</option><option value="week">每週</option><option value="month">每月（1 號到月底）</option></select></label>
+        <label id="anchorBox">任選一期的起始日<input type="date" id="sAnchor"></label>
+      </div>
+      <div class="note" style="margin-top:6px">每兩週：選任何一個你的結算期第一天，之後每 14 天一期。每週從週一算起。</div>
       <div class="row" style="margin-top:12px"><button class="p" id="sSave">儲存設定</button><span class="sub" id="sMsg"></span></div>
     </div>
     <div class="card" style="margin-top:16px">
@@ -266,17 +284,32 @@ function weekTotals(dayMap,lunch){
     const m=ymd(monday(parse(k)));w[m]=(w[m]||0)+h}
   return w;
 }
+let pOff=0;
+const dayHours=(a,b)=>{let h=0,n=0;for(const [k,r] of Object.entries(days)){if(k>=ymd(a)&&k<=ymd(b)){const x=hoursOf(r,lunchMin);if(x!=null){h+=x;n++}}}return {h,n}};
+function periodOf(off){
+  const t=new Date(),cyc=profile.cycle||"two";
+  if(cyc==="month"){const s=new Date(t.getFullYear(),t.getMonth()+off,1);return [s,new Date(s.getFullYear(),s.getMonth()+1,0)]}
+  if(cyc==="week"){const s=addDays(monday(t),off*7);return [s,addDays(s,6)]}
+  const a=profile.anchor?parse(profile.anchor):monday(t);
+  const k=Math.floor((new Date(t.getFullYear(),t.getMonth(),t.getDate())-a)/(14*864e5))+off;
+  const s=addDays(a,k*14);return [s,addDays(s,13)];
+}
+const statBox=(l,h,n)=>'<div class="stat"><span class="sub">'+l+'</span><b>'+fmt(h)+' h</b>'+(profile.rate?'<span class="sub num">'+money(h*profile.rate)+'</span>':'')+'</div>';
+function renderPeriod(){
+  const [s,e]=periodOf(pOff),r=dayHours(s,e);
+  $("#pLabel").textContent=ymd(s)+" ～ "+ymd(e);
+  $("#pSub").textContent=pOff===0?"本期":(pOff<0?Math.abs(pOff)+" 期前":pOff+" 期後");
+  $("#pStats").innerHTML=statBox("工時合計",r.h)+'<div class="stat"><span class="sub">上班天數</span><b>'+r.n+' 天</b></div>';
+  const f=$("#rFrom").value,t=$("#rTo").value;
+  if(f&&t&&f<=t){const q=dayHours(parse(f),parse(t));$("#rStats").innerHTML=statBox("自訂區間",q.h)+'<div class="stat"><span class="sub">上班天數</span><b>'+q.n+' 天</b></div>'}else $("#rStats").innerHTML='<div class="note">選好起訖日，這裡會顯示該區間的工時和金額。</div>';
+}
+$("#pPrev").onclick=()=>{pOff--;renderPeriod()};$("#pNext").onclick=()=>{pOff++;renderPeriod()};
+$("#rFrom").onchange=$("#rTo").onchange=renderPeriod;
 function renderSum(){
   const w=weekTotals(days,lunchMin),rate=profile.rate;
   const thisW=ymd(monday(new Date())),lastW=ymd(addDays(monday(new Date()),-7));
-  let periodH=0,periodLabel="";
-  if(profile.anchor){
-    const a=parse(profile.anchor),diff=Math.floor((monday(new Date())-a)/(14*864e5));
-    const s=addDays(a,Math.max(0,diff)*14);periodLabel="本期（"+ymd(s)+" 起兩週）";
-    periodH=(w[ymd(s)]||0)+(w[ymd(addDays(s,7))]||0);
-  }
   const st=[["本週",w[thisW]||0],["上週",w[lastW]||0]];
-  if(profile.anchor)st.push([periodLabel,periodH]);
+  renderPeriod();
   $("#hStats").innerHTML=st.map(([l,h])=>'<div class="stat"><span class="sub">'+l+'</span><b>'+fmt(h)+' h</b>'+(rate?'<span class="sub num">'+money(h*rate)+'</span>':'')+'</div>').join("");
   const ks=Object.keys(w).sort().reverse().slice(0,8);
   $("#weekList").innerHTML=ks.length?"":'<div class="empty">還沒有完整的上下班紀錄。</div>';
@@ -306,12 +339,13 @@ $("#dlExp").onclick=()=>dl("支出表.csv",[["日期","大類","分類","金額"
 /* settings */
 $("#sSave").onclick=()=>{
   const rate=parseFloat($("#sRate").value),lunch=parseInt($("#sLunch").value,10);
-  profile={rate:rate>0?rate:null,lunch:lunch>=0?lunch:30,anchor:$("#sAnchor").value||null};
+  profile={rate:rate>0?rate:null,lunch:lunch>=0?lunch:30,anchor:$("#sAnchor").value||null,cycle:$("#sCycle").value};pOff=0;
   lunchMin=profile.lunch;$("#sMsg").textContent="已儲存";renderClock();
   persist();
 };
+$("#sCycle").onchange=()=>{$("#anchorBox").hidden=$("#sCycle").value!=="two"};
 function fillSettings(){
-  $("#sRate").value=profile.rate??"";$("#sLunch").value=profile.lunch;$("#sAnchor").value=profile.anchor||"";
+  $("#sRate").value=profile.rate??"";$("#sLunch").value=profile.lunch;$("#sAnchor").value=profile.anchor||"";$("#sCycle").value=profile.cycle||"two";$("#anchorBox").hidden=(profile.cycle||"two")!=="two";
 }
 
 /* storage: this device only */
