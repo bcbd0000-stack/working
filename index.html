@@ -45,6 +45,9 @@ button.p{background:var(--accent);color:var(--accent-fg);font-weight:700}
 button.s{background:transparent;color:var(--accent)}
 button.out{background:var(--warm);border-color:var(--warm)}
 button:disabled{opacity:.5;cursor:default}
+body.hm #axis{visibility:hidden}
+body.hm #plot rect:not(.band):not(.hit){opacity:.12!important}
+.panelbox{margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:12px}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 input,select{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
 label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
@@ -87,6 +90,7 @@ textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(
     <h1>工時記帳本</h1>
     <div class="sub" id="who">本機版</div>
   </div>
+  <div style="display:flex;justify-content:flex-end;margin-top:-6px"><button class="s" id="hmBtn" style="padding:5px 12px;font-size:13px"></button></div>
   <div class="banner" id="privacy">資料只存在這支手機的瀏覽器裡，沒有上傳到任何地方。換手機或清除瀏覽器資料前，請先到「設定」做備份。</div>
   <nav class="tabs" role="tablist" id="tabs">
     <button role="tab" data-t="clock" aria-selected="true">打卡</button>
@@ -125,12 +129,19 @@ textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(
 
   <section id="p-exp" class="panel" hidden>
     <div class="card">
+      <h2>拍收據自動分類</h2>
+      <div id="rcBox"></div>
+    </div>
+    <div class="card" style="margin-top:16px">
       <h2>新增支出</h2>
       <div class="row">
         <label style="flex:1">金額<input type="number" inputmode="decimal" step="0.01" id="eAmt" placeholder="0"></label>
         <label>日期<input type="date" id="eDate"></label>
       </div>
       <div style="margin-top:10px"><div class="sub" style="margin-bottom:6px">分類</div><div class="chips" id="eCats"></div></div>
+      <div id="eSuper" hidden class="panelbox">
+        <div class="sub" style="margin-bottom:6px">超市買了什麼</div><div class="chips" id="eSuperSubs"></div>
+        <div class="sub" style="margin:10px 0 6px">哪一家（可不選）</div><div class="chips" id="eStores"></div></div>
       <label style="margin-top:10px">備註（可空白）<input type="text" id="eNote" maxlength="60"></label>
       <div class="row" style="margin-top:12px"><button class="p" id="eSave">記下來</button><span class="sub" id="eMsg"></span></div>
     </div>
@@ -206,7 +217,7 @@ textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(
 
 <script>
 const $=s=>document.querySelector(s);
-const CATS={"娛樂費":["外食","聚餐","娛樂","購物","其他娛樂"],"生活消費":["超市日用","交通油費","房租","手機網路","餐飲","其他生活"]};
+const CATS={"娛樂費":["外食","聚餐","娛樂","購物","其他娛樂"],"生活消費":["超市","交通油費","房租","手機網路","餐飲","其他生活"]};
 const pad=n=>String(n).padStart(2,"0");
 const ymd=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
 const parse=s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)};
@@ -214,7 +225,8 @@ const toMin=t=>{const [h,m]=t.split(":").map(Number);return h*60+m};
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
 const monday=d=>{const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()-((x.getDay()+6)%7));return x};
 const fmt=h=>(Math.round(h*100)/100).toString();
-const money=v=>"$"+(Math.round(v*100)/100).toLocaleString("en-US");
+let hm=false;try{hm=localStorage.getItem("gongshi-hide")==="1"}catch(e){}
+const money=v=>hm?"$••••":"$"+(Math.round(v*100)/100).toLocaleString("en-US");
 let lunchMin=30;
 function hoursOf(r,lunch){
   if(!r||!r.in||!r.out) return null;
@@ -277,13 +289,20 @@ function renderClock(){
 }
 
 /* expenses */
+const SUPER=[["超市·肉類海鮮","肉類海鮮"],["超市·蔬果","蔬果"],["超市·零食飲料","零食飲料"],["超市·乳蛋麵包","乳蛋麵包"],["超市·米麵冷凍","米麵冷凍"],["超市·清潔用品","清潔用品"],["超市·個人護理","個人護理"],["超市·酒類","酒類"],["超市日用","其他"]],STORES=["ALDI","Coles","Woolworths"];let store="";
+const isSuper=c=>!!c&&(c==="超市日用"||c.startsWith("超市·"));
 function renderCats(){
   const box=$("#eCats");box.innerHTML="";
   for(const [g,list] of Object.entries(CATS)) for(const c of list){
     const b=document.createElement("button");b.className="chip";b.textContent=c;b.dataset.g=g;
-    b.setAttribute("aria-pressed",cat&&cat.c===c);
-    b.onclick=()=>{cat={g,c};renderCats()};box.appendChild(b);
+    b.setAttribute("aria-pressed",c==="超市"?isSuper(cat&&cat.c):!!cat&&cat.c===c);
+    b.onclick=()=>{if(c==="超市")cat={g,c:isSuper(cat&&cat.c)?cat.c:"超市日用"};else{cat={g,c};store=""}renderCats()};box.appendChild(b);
   }
+  const sp=$("#eSuper");sp.hidden=!isSuper(cat&&cat.c);
+  if(!sp.hidden){const sb=$("#eSuperSubs");sb.innerHTML="";
+    SUPER.forEach(([v,l])=>{const b=document.createElement("button");b.className="chip";b.textContent=l;b.setAttribute("aria-pressed",cat.c===v);b.onclick=()=>{cat={g:"生活消費",c:v};renderCats()};sb.appendChild(b)});
+    const st=$("#eStores");st.innerHTML="";
+    STORES.forEach(n=>{const b=document.createElement("button");b.className="chip";b.textContent=n;b.setAttribute("aria-pressed",store===n);b.onclick=()=>{store=store===n?"":n;renderCats()};st.appendChild(b)})}
 }
 $("#eSave").onclick=()=>{
   const amt=parseFloat($("#eAmt").value);
@@ -291,8 +310,9 @@ $("#eSave").onclick=()=>{
   if(!cat){$("#eMsg").textContent="請選分類";return}
   const id="exp-"+Date.now();
   const rec={date:$("#eDate").value||today(),amt,group:cat.g,cat:cat.c,note:$("#eNote").value.trim()};
+  if(store&&isSuper(cat.c))rec.store=store;
   track("expense");if(rec.note)track("expenseNote");stats.cats[rec.cat]=(stats.cats[rec.cat]||0)+1;exps[id]=rec;renderExp();persist();
-  $("#eAmt").value="";$("#eNote").value="";$("#eMsg").textContent="已記下 "+money(amt);
+  $("#eAmt").value="";$("#eNote").value="";store="";renderCats();$("#eMsg").textContent="已記下 "+money(amt);
 };
 function renderExp(){
   const keys=Object.keys(exps).sort((a,b)=>exps[b].date.localeCompare(exps[a].date)||b.localeCompare(a)).slice(0,20);
@@ -301,7 +321,7 @@ function renderExp(){
     const r=exps[k];const el=document.createElement("div");el.className="item";
     el.innerHTML='<div class="l"><b></b><small></small></div><div class="row"><span class="num"></span><button class="x">刪除</button></div>';
     el.querySelector("b").textContent=r.cat;
-    el.querySelector("small").textContent=r.date+(r.note?"　"+r.note:"");
+    el.querySelector("small").textContent=r.date+(r.store?"　"+r.store:"")+(r.note?"　"+r.note:"");
     el.querySelector("span").textContent=money(r.amt);
     el.querySelector(".x").onclick=()=>{track("deleteExp");delete exps[k];renderExp();persist()};
     $("#expList").appendChild(el);
@@ -318,7 +338,7 @@ function weekTotals(dayMap,lunch){
 const dayHours=(a,b)=>{let h=0,n=0;for(const [k,r] of Object.entries(days)){if(k>=ymd(a)&&k<=ymd(b)){const x=hoursOf(r,lunchMin);if(x!=null){h+=x;n++}}}return {h,n}};
 const statBox=(l,h)=>'<div class="stat"><span class="sub">'+l+'</span><b>'+fmt(h)+' h</b>'+(profile.rate?'<span class="sub num">'+money(h*profile.rate)+'</span>':'')+'</div>';
 const mdd=x=>x.slice(5).replace("-","/");
-const moneyS=v=>(v<0?"-":"")+"$"+Math.abs(Math.round(v*100)/100).toLocaleString("en-US");
+const moneyS=v=>hm?"$••••":(v<0?"-":"")+"$"+Math.abs(Math.round(v*100)/100).toLocaleString("en-US");
 function earliest(){const d=[...Object.keys(days),...Object.values(exps).map(r=>r.date)].filter(Boolean).sort();return d[0]?parse(d[0]):new Date()}
 function periodOfDate(d){
   const cyc=profile.cycle||"two";
@@ -426,6 +446,8 @@ function renderSum(){
     if(ymd(monday(parse(r.date)))===thisW)tw+=r.amt;
   }
   $("#eStats").innerHTML='<div class="stat"><span class="sub">本週</span><b>'+money(tw)+'</b></div><div class="stat"><span class="sub">本月</span><b>'+money(tm)+'</b></div>';
+  const stT=STORES.map(n=>n+" "+money(Object.values(exps).filter(r=>r.store===n&&r.date.startsWith(mp)).reduce((a,r)=>a+r.amt,0)));
+  $("#eStats").innerHTML+='<div class="sub" style="grid-column:1/-1">本月超市：'+stT.join("　")+'</div>';
   const cs=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
   $("#catList").innerHTML=cs.length?"":'<div class="empty">本月還沒有支出。</div>';
   cs.forEach(([k,v])=>{const el=document.createElement("div");el.className="item";el.innerHTML='<span></span><span class="num"></span>';
@@ -452,6 +474,147 @@ function fillSettings(){
 
 /* storage: this device only */
 const KEY="gongshi-jizhang-v1";
+
+/* ---------- 隱藏金額 ---------- */
+function syncHm(){document.body.classList.toggle("hm",hm);$("#hmBtn").textContent=hm?"顯示金額":"隱藏金額"}
+$("#hmBtn").onclick=()=>{hm=!hm;try{localStorage.setItem("gongshi-hide",hm?"1":"0")}catch(e){}syncHm();renderClock();renderExp();renderSum()};
+syncHm();
+/* ===== 收據自動分類（可接任何 AI）=====
+   host: {subs(){[{sub,group}]}, today(){}, save(info,lines){Promise<n>}, direct?:{label, run(file,prompt){Promise<text>}}, settings?(el), done?()} */
+const RC_SUPER=[["超市·肉類海鮮","肉類海鮮"],["超市·蔬果","蔬果"],["超市·零食飲料","零食飲料"],["超市·乳蛋麵包","乳蛋麵包"],["超市·米麵冷凍","米麵冷凍"],["超市·清潔用品","清潔用品"],["超市·個人護理","個人護理"],["超市·酒類","酒類"],["超市日用","其他"]];
+function rcPrompt(subs,todayStr){
+  return `這是一張澳洲收據的照片。請讀出內容並把品項歸類。只回傳一個 JSON 物件，不要其他文字：
+{"store":"店名(英文原文)","chain":"ALDI 或 Coles 或 Woolworths 或 其他(Woolworths 收據也可能印 WOW 或 Woolworths Metro)","date":"YYYY-MM-DD","total":收據總額數字,"lines":[{"sub":"分類名","amount":該分類品項金額加總,"items":"品項簡述(中文,最多25字)"}]}
+規則：
+- 日期是日.月.年（例如 27.10.26 = 2026-10-27）；讀不出來就用 ${todayStr}。
+- 每個品項只能歸入下列分類之一，同分類合併成一筆，lines 的 amount 加總要等於收據總額（含 GST，折扣要扣掉）。
+- 可用分類：${subs.join("、")}。
+- 超市品項：肉/魚/海鮮→超市·肉類海鮮；蔬菜水果→超市·蔬果；餅乾零食飲料→超市·零食飲料；牛奶起司蛋麵包→超市·乳蛋麵包；米麵冷凍食品罐頭→超市·米麵冷凍；清潔紙品→超市·清潔用品；洗沐保養藥妝→超市·個人護理；酒→超市·酒類；分不出來→超市日用。
+- 加油站→名稱含「油」的分類；餐廳、咖啡店、外帶→外食或餐飲；香菸→Cigarettes（沒有就用其他生活）；其他無法判斷→其他生活。`;
+}
+function rcExtract(text){
+  let t=String(text||"").trim();
+  const f=t.match(/```(?:json)?\s*([\s\S]*?)```/i);if(f)t=f[1];
+  const i=t.indexOf("{"),j=t.lastIndexOf("}");
+  if(i<0||j<i)throw new Error("找不到 JSON");
+  return JSON.parse(t.slice(i,j+1));
+}
+function rcNormalize(r,subs,todayStr){
+  const ls=(r.lines||[]).filter(l=>subs.includes(l.sub)&&+l.amount>0).map(l=>({sub:l.sub,amount:Math.round(+l.amount*100)/100,items:String(l.items||"").slice(0,40)}));
+  if(!ls.length)throw new Error("沒有可用的品項分類");
+  const d=/^\d{4}-\d\d-\d\d$/.test(r.date||"")?r.date:todayStr;
+  const s=String(r.store||"").slice(0,30),c=String(r.chain||"");
+  const ch=/aldi/i.test(c)?"ALDI":/coles/i.test(c)?"Coles":/wool|wow/i.test(c)?"Woolworths":/aldi/i.test(s)?"ALDI":/coles/i.test(s)?"Coles":/woolworths/i.test(s)?"Woolworths":"";
+  return {info:{store:s,chain:ch,date:d,total:+r.total||0},lines:ls};
+}
+function rcMount(box,host){
+  const E=(t,p,x)=>{const e=document.createElement(t);if(p)Object.assign(e,p);if(x)e.style.cssText=x;return e};
+  const allSubs=()=>host.subs().map(x=>x.sub);
+  let lines=[],info={};
+  box.innerHTML="";
+  const meta=E("span",{className:"sub"});
+  const out=E("div",{},"margin-top:8px");
+  const row=E("div",{className:"row"});
+  let file=null;
+  if(host.direct){
+    file=E("input",{type:"file",accept:"image/*"});file.hidden=true;
+    const btn=E("button",{className:"p",textContent:host.direct.label||"拍收據自動分類"});
+    btn.onclick=()=>file.click();
+    file.onchange=async()=>{const f=file.files[0];file.value="";if(!f)return;
+      btn.disabled=true;meta.style.color="";meta.textContent="AI 讀取中…約 10–30 秒";lines=[];render();
+      try{const txt=await host.direct.run(f,rcPrompt(allSubs(),host.today()));take(txt)}
+      catch(e){fail(e)}
+      btn.disabled=false};
+    row.append(btn,file);
+  }
+  row.append(meta);box.append(row);
+  function fail(e){meta.style.color="var(--bad,#b23a2a)";
+    const c=e&&e.code;
+    meta.textContent=c==="not_granted"?"需要允許使用 Claude 才能讀收據。":c==="rate_limited"?"用量太頻繁，晚點再試。":(e&&e.userMsg)?e.userMsg:"讀不出來，請拍清楚一點，或改用下面「用其他 AI」。"}
+  function take(txt){const r=rcNormalize(rcExtract(txt),allSubs(),host.today());info=r.info;lines=r.lines;render()}
+  // 用任何 AI：複製指令 → 貼回結果
+  const d=E("details",{},"margin-top:10px");
+  d.append(E("summary",{className:"sub",textContent:"用其他 AI（ChatGPT、Gemini、Copilot…都可以）"},"cursor:pointer"));
+  const inner=E("div",{},"display:grid;gap:8px;margin-top:8px");
+  inner.append(E("div",{className:"note",textContent:"① 複製指令　② 在任何 AI 的 App 附上收據照片、貼上指令　③ 把 AI 的回覆整段貼回下面，按「解析」。"}));
+  const cp=E("button",{className:"s",textContent:"複製指令"});
+  cp.onclick=async()=>{const p=rcPrompt(allSubs(),host.today());
+    try{await navigator.clipboard.writeText(p);cp.textContent="已複製"}catch(e){ta0.value=p;ta0.hidden=false;ta0.select();cp.textContent="已顯示，請手動複製"}
+    setTimeout(()=>cp.textContent="複製指令",2000)};
+  const ta0=E("textarea",{readOnly:true},"min-height:90px");ta0.hidden=true;
+  const ta=E("textarea",{placeholder:"把 AI 的回覆貼在這裡"},"min-height:90px");
+  const go=E("button",{className:"p",textContent:"解析"});
+  go.onclick=()=>{try{take(ta.value);ta.value="";meta.style.color=""}catch(e){fail({userMsg:"解析不出來：請確認貼的是 AI 回覆的整段 JSON（"+(e.message||"格式錯誤")+"）。"})}};
+  inner.append(cp,ta0,ta,go);d.append(inner);box.append(d);
+  if(host.settings){const d2=E("details",{},"margin-top:10px");d2.append(E("summary",{className:"sub",textContent:"直接拍照（用自己的 AI 金鑰）"},"cursor:pointer"));
+    const b2=E("div",{},"display:grid;gap:8px;margin-top:8px");host.settings(b2);d2.append(b2);box.append(d2)}
+  box.append(out);
+  function sum(){const s=lines.reduce((a,l)=>a+(+l.amount||0),0);
+    const bad=info.total&&Math.abs(info.total-s)>0.05;
+    meta.style.color=bad?"var(--bad,#b23a2a)":"";
+    meta.textContent=(info.chain||info.store||"收據")+" · "+info.date+" · 分類合計 $"+(Math.round(s*100)/100)+(bad?"（收據總額 $"+info.total+"，對不上，請檢查）":"")}
+  function render(){out.innerHTML="";if(!lines.length)return;
+    lines.forEach(l=>{const w=E("div",{},"display:grid;grid-template-columns:1fr 92px;gap:6px;margin-top:6px");
+      const sel=E("select");allSubs().forEach(c=>{const o=E("option");o.value=o.textContent=c;sel.append(o)});sel.value=l.sub;sel.onchange=()=>{l.sub=sel.value};
+      const n=E("input",{type:"number",step:"0.01",value:l.amount});n.oninput=()=>{l.amount=parseFloat(n.value)||0;sum()};
+      w.append(sel,n,E("small",{className:"sub",textContent:l.items||""},"grid-column:1/3"));out.append(w)});
+    const r=E("div",{className:"row"},"margin-top:10px");
+    const ok=E("button",{className:"p",textContent:"全部記下"}),no=E("button",{className:"s",textContent:"取消"});
+    no.onclick=()=>{lines=[];meta.textContent="";render()};
+    ok.onclick=async()=>{ok.disabled=true;try{const n=await host.save(info,lines.filter(l=>l.amount>0));lines=[];meta.style.color="";meta.textContent="收據已記 "+n+" 筆";render();if(host.done)host.done()}catch(e){meta.style.color="var(--bad,#b23a2a)";meta.textContent="儲存失敗，請再按一次。";ok.disabled=false}};
+    r.append(ok,no);out.append(r);sum()}
+}
+
+/* ---------- 自己的 AI 金鑰（選用，只存在這支手機）---------- */
+const AIKEY="gongshi-ai-v1";
+const AIDEF={anthropic:{n:"Claude (Anthropic)",m:"claude-sonnet-5-5"},openai:{n:"ChatGPT (OpenAI)",m:"gpt-4o"},gemini:{n:"Gemini (Google)",m:"gemini-2.5-flash"}};
+let ai={provider:"gemini",key:"",model:""};try{ai={...ai,...JSON.parse(localStorage.getItem(AIKEY)||"{}")}}catch(e){}
+function fileToB64(f,max=1568){return new Promise((ok,no)=>{const u=URL.createObjectURL(f),im=new Image();
+  im.onload=()=>{const k=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);
+    c.getContext("2d").drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);ok(c.toDataURL("image/jpeg",0.85).split(",")[1])};
+  im.onerror=()=>no({userMsg:"這張照片讀不了。"});im.src=u})}
+async function aiRun(f,prompt){
+  const b64=await fileToB64(f),m=ai.model||AIDEF[ai.provider].m;let r,j;
+  try{
+    if(ai.provider==="anthropic"){
+      r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"content-type":"application/json","x-api-key":ai.key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body:JSON.stringify({model:m,max_tokens:1500,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:prompt}]}]})});
+      j=await r.json();if(!r.ok)throw j;return j.content.map(x=>x.text||"").join("")}
+    if(ai.provider==="openai"){
+      r=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+ai.key},
+        body:JSON.stringify({model:m,messages:[{role:"user",content:[{type:"text",text:prompt},{type:"image_url",image_url:{url:"data:image/jpeg;base64,"+b64}}]}]})});
+      j=await r.json();if(!r.ok)throw j;return j.choices[0].message.content}
+    r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(m)+":generateContent",{method:"POST",headers:{"content-type":"application/json","x-goog-api-key":ai.key},
+      body:JSON.stringify({contents:[{parts:[{text:prompt},{inline_data:{mime_type:"image/jpeg",data:b64}}]}]})});
+    j=await r.json();if(!r.ok)throw j;return j.candidates[0].content.parts.map(x=>x.text||"").join("")
+  }catch(e){
+    const msg=(e&&e.error&&(e.error.message||e.error))||"";
+    throw {userMsg:"AI 沒回應成功"+(msg?"："+String(msg).slice(0,80):"")+"。請檢查金鑰和模型名稱，或改用「用其他 AI」。"}}
+}
+function aiSettings(el){
+  const sel=document.createElement("select");Object.entries(AIDEF).forEach(([k,v])=>{const o=document.createElement("option");o.value=k;o.textContent=v.n;sel.append(o)});sel.value=ai.provider;
+  const key=document.createElement("input");key.type="password";key.placeholder="貼上你的 API 金鑰";key.value=ai.key;key.autocomplete="off";
+  const mod=document.createElement("input");mod.placeholder="模型名稱（預設 "+AIDEF[ai.provider].m+"）";mod.value=ai.model;
+  sel.onchange=()=>{mod.placeholder="模型名稱（預設 "+AIDEF[sel.value].m+"）";mod.value=""};
+  const sv=document.createElement("button");sv.className="p";sv.textContent="儲存";
+  const note=document.createElement("div");note.className="note";note.textContent="金鑰只存在這支手機的瀏覽器裡。拍照後，照片會直接傳給你選的 AI 公司，費用從你自己的金鑰扣。建議用有額度上限的金鑰。存好後，上方會出現「拍收據」按鈕。";
+  sv.onclick=()=>{ai={provider:sel.value,key:key.value.trim(),model:mod.value.trim()};try{localStorage.setItem(AIKEY,JSON.stringify(ai))}catch(e){}mountRc()};
+  el.append(sel,key,mod,sv,note);
+}
+function mountRc(){
+  rcMount($("#rcBox"),{
+    subs:()=>[...Object.entries(CATS).flatMap(([g,l])=>l.filter(c=>c!=="超市").map(c=>({sub:c,group:g}))),...SUPER.map(x=>({sub:x[0],group:"生活消費"}))],
+    today,
+    direct:ai.key?{label:"拍收據自動分類（"+AIDEF[ai.provider].n+"）",run:aiRun}:null,
+    settings:aiSettings,
+    save:async(info,ls)=>{let n=0;ls.forEach((l,i)=>{const g=(Object.entries(CATS).find(([g,li])=>li.includes(l.sub))||[])[0]||"生活消費";
+      const rec={date:info.date,amt:Math.round(l.amount*100)/100,group:g,cat:l.sub,note:((info.chain||info.store?(info.chain||info.store)+"：":"")+(l.items||"")).slice(0,60)};
+      if(info.chain&&isSuper(l.sub))rec.store=info.chain;
+      exps["exp-"+Date.now()+"-"+i]=rec;n++});
+      track("receipt");renderExp();persist();return n}});
+}
+mountRc();
+
 function persist(){try{localStorage.setItem(KEY,JSON.stringify({profile,days,exps,stats}))}catch(e){$("#bkMsg").textContent="這個瀏覽器不能儲存資料（可能是無痕模式）。"}}
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY)||"null");if(d){profile={rate:null,lunch:30,anchor:null,lag:5,...d.profile};days=d.days||{};exps=d.exps||{};if(d.stats)stats={first:null,open:{},c:{},cats:{},...d.stats}}}catch(e){}lunchMin=profile.lunch??30}
 function saveFile(name,text,type){const b=new Blob([text],{type});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
