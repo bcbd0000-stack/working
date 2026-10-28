@@ -570,9 +570,9 @@ function rcMount(box,host){
 
 /* ===== 手機上直接讀收據（OCR + 關鍵字分類，不用金鑰）===== */
 const OCR_KW=[
- ["超市·肉類海鮮",/salmon|salm\b|tas ?sal|lbst|lobster|scallop|prawn|shrimp|fish|tuna|barra|squid|calamari|crab|oyster|mussel|cod\b|beef|mince|steak|chicken|chkn|pork|lamb|bacon|\bham\b|sausage|snag|rump|fillet|schnitzel|drumstick|brisket|ribs?\b|salami|chorizo|meatball/],
+ ["超市·肉類海鮮",/salmon|salm\b|tas ?sal|l[bk]s?t\b|lobst|lobster|\btail\b|scallop|prawn|shrimp|fish|tuna|barra|squid|calamari|crab|oyster|mussel|cod\b|beef|mince|steak|chicken|chkn|pork|lamb|bacon|\bham\b|sausage|snag|rump|fillet|schnitzel|drumstick|brisket|ribs?\b|salami|chorizo|meatball/],
  ["超市·酒類",/\bbeer\b|\bwine\b|vodka|whisk|\bgin\b|\brum\b|cider|lager|bourbon|spirits?\b|shiraz|chardonnay|prosecco|champagne|sauvignon|pinot|moscato|\bale\b|stout|seltzer/],
- ["超市·零食飲料",/cracker|cookie|biscuit|chips?\b|crisps?|choc|candy|lolly|lollies|snack|juice|water\b|\bcola\b|\bcoke\b|pepsi|soda|drink|\btea\b|coffee|energy|shortbread|s\/bread|peanut|\bnuts?\b|popcorn|wafer|\bgum\b|ice ?cream|muesli bar|bar\b|jelly|marshmallow|pretzel|mints?\b|cordial|kombucha|sparkling|tim ?tam|oreo|doritos|smiths|twisties|cadbury|lindt/],
+ ["超市·零食飲料",/cracker|cookie|biscuit|chips?\b|crisps?|choc|candy|lolly|lollies|snack|juice|water\b|\bcola\b|\bcoke\b|pepsi|soda|drink|\btea\b|coffee|energy|shortbread|s\/b[a-z]{2,5}|peanut|\bnuts?\b|popcorn|wafer|\bgum\b|ice ?cream|muesli bar|bar\b|jelly|marshmallow|pretzel|mints?\b|cordial|kombucha|sparkling|tim ?tam|oreo|doritos|smiths|twisties|cadbury|lindt/],
  ["超市·乳蛋麵包",/milk|cheese|chees|yogh?urt|butter|cream|\beggs?\b|bread|\broll|\bbun|croissant|loaf|bagel|\bwrap|tortilla|muffin|crumpet|sourdough|bakery|danish|pastry/],
  ["超市·蔬果",/apple|banana|orange|grape|berry|berries|strawb|blueb|avocado|tomato|lettuce|onion|potato|carrot|broccoli|cucumber|capsicum|mushroom|spinach|pumpkin|lemon|\blime\b|mango|melon|fruit|\bveg|garlic|ginger|zucch|cabbage|corn\b|celery|kiwi|pear\b|peach|plum|cherry|herb|salad|bok choy|choy|shallot|chilli|pineapple|coriander|parsley|basil/],
  ["超市·個人護理",/shampoo|conditioner|\bsoap\b|body ?wash|toothpaste|toothbrush|deodorant|razor|lotion|sunscreen|nappy|nappies|tampon|\bpads?\b|panadol|vitamin|moistur|cleanser|mouthwash|floss|cotton|makeup|cosmetic|perfume|hair ?(?:spray|gel|dye)/],
@@ -586,8 +586,8 @@ function ocrClassify(name,isSuper){
 }
 function ocrParse(text,todayStr){
   const raw=String(text||"").replace(/\r/g,"").split("\n").map(l=>l.trim()).filter(Boolean);
-  const head=raw.slice(0,8).join(" ").toLowerCase();
-  const chain=/aldi/.test(head)?"ALDI":/coles/.test(head)?"Coles":/woolworths|wooly|\bwow\b/.test(head)?"Woolworths":"";
+  const whole=raw.join(" ").toLowerCase();
+  const chain=/a[l1i|]d[i1l|]|limited partnership|aldi\.com/.test(whole)?"ALDI":/coles/.test(whole)?"Coles":/woolworths|wooliesx|wooly|everyday rewards|\bwow\b/.test(whole)?"Woolworths":"";
   const store=chain||(raw[0]||"").slice(0,30);
   // 日期
   let date=todayStr;const all=raw.join("\n");
@@ -596,13 +596,13 @@ function ocrParse(text,todayStr){
   else{const mons=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
     m=all.toLowerCase().match(/\b(\d{1,2})\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s*,?\s*(\d{2}|\d{4})\b/);
     if(m){let y=+m[3];if(y<100)y+=2000;date=y+"-"+String(mons.indexOf(m[2])+1).padStart(2,"0")+"-"+String(+m[1]).padStart(2,"0")}}
-  const price=s=>{const x=s.replace(",",".").replace(/[oO]/g,"0");const v=parseFloat(x);return isFinite(v)?v:NaN};
+  const price=s=>{const x=s.replace(/[,\s]/,".").replace(/[oO]/g,"0");const v=parseFloat(x);return isFinite(v)?v:NaN};
   const STOP=/total|subtotal|sub total|gst|change|card|visa|master|eftpos|balance|cash|tax|items?\b|savings|saved|discount\b.*total|rounding|amount|tendered|tender|receipt|invoice|abn|thank|vouch|points|rewards|everyday|flybuys|member|special\b.*off|you saved|^\s*\*/i;
   let total=0;const items=[];
   for(const l of raw){
     const tm=l.match(/(?:total|card sales|eftpos|balance due|amount due)[^\d-]*\$?\s*(\d+[.,]\d\d)\b/i);
     if(tm){const v=price(tm[1]);if(v>total)total=v;continue}
-    const im=l.match(/^(?:\d{4,8}\s+)?(.*?[A-Za-z].*?)\s+\$?(-?\d{1,4}[.,]\d\d)\s*[A-Za-z]?$/);
+    const im=l.match(/^(?:\d{4,8}\s+)?(.*?[A-Za-z].*?)\s+\$?(-?\d{1,4}[.,\s]\d\d)\s*\S{0,2}$/);
     if(!im)continue;
     const name=im[1].replace(/^[\d\s*xX@.-]+(?=[A-Za-z])/,"").trim();
     if(!name||STOP.test(name))continue;
@@ -611,7 +611,9 @@ function ocrParse(text,todayStr){
   }
   const by={};
   items.forEach(it=>{const sub=ocrClassify(it.name);(by[sub]=by[sub]||{amount:0,names:[]});by[sub].amount+=it.amount;by[sub].names.push(it.name)});
-  const lines=Object.entries(by).map(([sub,o])=>({sub,amount:Math.round(o.amount*100)/100,items:o.names.join("、").slice(0,25)}));
+  const got=items.reduce((a,i)=>a+i.amount,0),gap=Math.round((total-got)*100)/100;
+  if(total>0&&gap>0.05)(by["超市日用"]=by["超市日用"]||{amount:0,names:[]}),by["超市日用"].amount+=gap,by["超市日用"].names.push("（有品項沒讀到，請自行分類）");
+  const lines=Object.entries(by).map(([sub,o])=>({sub,amount:Math.round(o.amount*100)/100,items:o.names.join("、").slice(0,40)}));
   return {store,chain,date,total,lines,itemCount:items.length};
 }
 function ocrPrep(f){return new Promise((ok,no)=>{const u=URL.createObjectURL(f),im=new Image();
@@ -626,8 +628,8 @@ async function ocrRun(f,prompt,ui){
   ui.status("載入辨識元件…第一次要下載約十幾 MB，請稍等");
   await ocrLoad();
   const c=await ocrPrep(f);
-  const r=await Tesseract.recognize(c,"eng",{logger:m=>{if(m.status==="recognizing text")ui.status("辨識中 "+Math.round(m.progress*100)+"%")}});
-  const txt=r.data.text;ui.note(txt);
+  const w=await Tesseract.createWorker("eng",1,{logger:m=>{if(m.status==="recognizing text")ui.status("辨識中 "+Math.round(m.progress*100)+"%")}});
+  let txt;try{await w.setParameters({tessedit_pageseg_mode:"6",preserve_interword_spaces:"1"});txt=(await w.recognize(c)).data.text}finally{await w.terminate()}ui.note(txt);
   const o=ocrParse(txt,ui.today());
   if(!o.lines.length)throw {userMsg:"認不出品項。請把收據攤平、光線均勻再拍一次，或改用「用其他 AI」。"};
   return JSON.stringify(o);
