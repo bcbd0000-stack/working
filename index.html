@@ -515,19 +515,22 @@ function rcMount(box,host){
   const meta=E("span",{className:"sub"});
   const out=E("div",{},"margin-top:8px");
   const row=E("div",{className:"row"});
-  let file=null;
-  if(host.direct){
-    file=E("input",{type:"file",accept:"image/*"});file.hidden=true;
-    const btn=E("button",{className:"p",textContent:host.direct.label||"拍收據自動分類"});
+  const note=E("details",{},"margin-top:8px");note.hidden=true;
+  const noteTx=E("pre",{},"white-space:pre-wrap;font-size:12px;margin:6px 0 0;color:var(--muted)");note.append(E("summary",{className:"sub",textContent:"看辨識到的文字"}),noteTx);
+  const ui={status:t=>{meta.style.color="";meta.textContent=t},note:t=>{noteTx.textContent=t;note.hidden=false},today:()=>host.today()};
+  const dirs=[host.direct,...(host.directs||[])].filter(Boolean);
+  dirs.forEach((dd,k)=>{
+    const file=E("input",{type:"file",accept:"image/*"});file.hidden=true;
+    const btn=E("button",{className:k===0?"p":"s",textContent:dd.label||"拍收據自動分類"});
     btn.onclick=()=>file.click();
     file.onchange=async()=>{const f=file.files[0];file.value="";if(!f)return;
-      btn.disabled=true;meta.style.color="";meta.textContent="AI 讀取中…約 10–30 秒";lines=[];render();
-      try{const txt=await host.direct.run(f,rcPrompt(allSubs(),host.today()));take(txt)}
+      btn.disabled=true;note.hidden=true;meta.style.color="";meta.textContent="讀取中…";lines=[];render();
+      try{const txt=await dd.run(f,rcPrompt(allSubs(),host.today()),ui);take(txt)}
       catch(e){fail(e)}
       btn.disabled=false};
     row.append(btn,file);
-  }
-  row.append(meta);box.append(row);
+  });
+  row.append(meta);box.append(row);box.append(note);
   function fail(e){meta.style.color="var(--bad,#b23a2a)";
     const c=e&&e.code;
     meta.textContent=c==="not_granted"?"需要允許使用 Claude 才能讀收據。":c==="rate_limited"?"用量太頻繁，晚點再試。":(e&&e.userMsg)?e.userMsg:"讀不出來，請拍清楚一點，或改用下面「用其他 AI」。"}
@@ -563,6 +566,71 @@ function rcMount(box,host){
     no.onclick=()=>{lines=[];meta.textContent="";render()};
     ok.onclick=async()=>{ok.disabled=true;try{const n=await host.save(info,lines.filter(l=>l.amount>0));lines=[];meta.style.color="";meta.textContent="收據已記 "+n+" 筆";render();if(host.done)host.done()}catch(e){meta.style.color="var(--bad,#b23a2a)";meta.textContent="儲存失敗，請再按一次。";ok.disabled=false}};
     r.append(ok,no);out.append(r);sum()}
+}
+
+/* ===== 手機上直接讀收據（OCR + 關鍵字分類，不用金鑰）===== */
+const OCR_KW=[
+ ["超市·肉類海鮮",/salmon|salm\b|tas ?sal|lbst|lobster|scallop|prawn|shrimp|fish|tuna|barra|squid|calamari|crab|oyster|mussel|cod\b|beef|mince|steak|chicken|chkn|pork|lamb|bacon|\bham\b|sausage|snag|rump|fillet|schnitzel|drumstick|brisket|ribs?\b|salami|chorizo|meatball/],
+ ["超市·酒類",/\bbeer\b|\bwine\b|vodka|whisk|\bgin\b|\brum\b|cider|lager|bourbon|spirits?\b|shiraz|chardonnay|prosecco|champagne|sauvignon|pinot|moscato|\bale\b|stout|seltzer/],
+ ["超市·零食飲料",/cracker|cookie|biscuit|chips?\b|crisps?|choc|candy|lolly|lollies|snack|juice|water\b|\bcola\b|\bcoke\b|pepsi|soda|drink|\btea\b|coffee|energy|shortbread|s\/bread|peanut|\bnuts?\b|popcorn|wafer|\bgum\b|ice ?cream|muesli bar|bar\b|jelly|marshmallow|pretzel|mints?\b|cordial|kombucha|sparkling|tim ?tam|oreo|doritos|smiths|twisties|cadbury|lindt/],
+ ["超市·乳蛋麵包",/milk|cheese|chees|yogh?urt|butter|cream|\beggs?\b|bread|\broll|\bbun|croissant|loaf|bagel|\bwrap|tortilla|muffin|crumpet|sourdough|bakery|danish|pastry/],
+ ["超市·蔬果",/apple|banana|orange|grape|berry|berries|strawb|blueb|avocado|tomato|lettuce|onion|potato|carrot|broccoli|cucumber|capsicum|mushroom|spinach|pumpkin|lemon|\blime\b|mango|melon|fruit|\bveg|garlic|ginger|zucch|cabbage|corn\b|celery|kiwi|pear\b|peach|plum|cherry|herb|salad|bok choy|choy|shallot|chilli|pineapple|coriander|parsley|basil/],
+ ["超市·個人護理",/shampoo|conditioner|\bsoap\b|body ?wash|toothpaste|toothbrush|deodorant|razor|lotion|sunscreen|nappy|nappies|tampon|\bpads?\b|panadol|vitamin|moistur|cleanser|mouthwash|floss|cotton|makeup|cosmetic|perfume|hair ?(?:spray|gel|dye)/],
+ ["超市·清潔用品",/detergent|dishwash|dish ?liq|clean|toilet|tissue|paper ?towel|bin ?liner|garbage|sponge|laundry|bleach|wipes?\b|\bfoil\b|cling|baking ?paper|napkin|air ?fresh|mop|broom|glad\b|zip ?bag|freezer bag|sanitis|disinfect/],
+ ["超市·米麵冷凍",/\brice\b|noodle|pasta|\bfrz\b|frozen|flour|\boats?\b|cereal|\bcan\b|\btin\b|sauce|soup|dumpling|pizza|\boil\b|sugar|\bbeans?\b|spaghetti|lasagne|vermicelli|ramen|stock|spice|salt\b|pepper|honey|jam\b|spread|vinegar|curry|chickpea|lentil|\bnori|seaweed|tofu|mayo|ketchup|mustard|gnocchi|pie\b|pies\b|nuggets|fries|hash ?brown/]
+];
+function ocrClassify(name,isSuper){
+  const t=name.toLowerCase();
+  for(const [sub,re] of OCR_KW) if(re.test(t)) return sub;
+  return "超市日用";
+}
+function ocrParse(text,todayStr){
+  const raw=String(text||"").replace(/\r/g,"").split("\n").map(l=>l.trim()).filter(Boolean);
+  const head=raw.slice(0,8).join(" ").toLowerCase();
+  const chain=/aldi/.test(head)?"ALDI":/coles/.test(head)?"Coles":/woolworths|wooly|\bwow\b/.test(head)?"Woolworths":"";
+  const store=chain||(raw[0]||"").slice(0,30);
+  // 日期
+  let date=todayStr;const all=raw.join("\n");
+  let m=all.match(/\b(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2}|\d{4})\b/);
+  if(m){let d=+m[1],mo=+m[2],y=+m[3];if(y<100)y+=2000;if(mo>=1&&mo<=12&&d>=1&&d<=31)date=y+"-"+String(mo).padStart(2,"0")+"-"+String(d).padStart(2,"0")}
+  else{const mons=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+    m=all.toLowerCase().match(/\b(\d{1,2})\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s*,?\s*(\d{2}|\d{4})\b/);
+    if(m){let y=+m[3];if(y<100)y+=2000;date=y+"-"+String(mons.indexOf(m[2])+1).padStart(2,"0")+"-"+String(+m[1]).padStart(2,"0")}}
+  const price=s=>{const x=s.replace(",",".").replace(/[oO]/g,"0");const v=parseFloat(x);return isFinite(v)?v:NaN};
+  const STOP=/total|subtotal|sub total|gst|change|card|visa|master|eftpos|balance|cash|tax|items?\b|savings|saved|discount\b.*total|rounding|amount|tendered|tender|receipt|invoice|abn|thank|vouch|points|rewards|everyday|flybuys|member|special\b.*off|you saved|^\s*\*/i;
+  let total=0;const items=[];
+  for(const l of raw){
+    const tm=l.match(/(?:total|card sales|eftpos|balance due|amount due)[^\d-]*\$?\s*(\d+[.,]\d\d)\b/i);
+    if(tm){const v=price(tm[1]);if(v>total)total=v;continue}
+    const im=l.match(/^(?:\d{4,8}\s+)?(.*?[A-Za-z].*?)\s+\$?(-?\d{1,4}[.,]\d\d)\s*[A-Za-z]?$/);
+    if(!im)continue;
+    const name=im[1].replace(/^[\d\s*xX@.-]+(?=[A-Za-z])/,"").trim();
+    if(!name||STOP.test(name))continue;
+    const v=price(im[2]);if(!isFinite(v)||v===0)continue;
+    items.push({name,amount:v});
+  }
+  const by={};
+  items.forEach(it=>{const sub=ocrClassify(it.name);(by[sub]=by[sub]||{amount:0,names:[]});by[sub].amount+=it.amount;by[sub].names.push(it.name)});
+  const lines=Object.entries(by).map(([sub,o])=>({sub,amount:Math.round(o.amount*100)/100,items:o.names.join("、").slice(0,25)}));
+  return {store,chain,date,total,lines,itemCount:items.length};
+}
+function ocrPrep(f){return new Promise((ok,no)=>{const u=URL.createObjectURL(f),im=new Image();
+  im.onload=()=>{const k=Math.min(2,1800/im.width),c=document.createElement("canvas");c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);
+    const x=c.getContext("2d");x.drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);
+    const d=x.getImageData(0,0,c.width,c.height),a=d.data;let lo=255,hi=0;
+    for(let i=0;i<a.length;i+=4){const g=.3*a[i]+.59*a[i+1]+.11*a[i+2];a[i]=a[i+1]=a[i+2]=g;if(g<lo)lo=g;if(g>hi)hi=g}
+    const sp=Math.max(1,hi-lo);for(let i=0;i<a.length;i+=4){const g=(a[i]-lo)*255/sp;a[i]=a[i+1]=a[i+2]=g}
+    x.putImageData(d,0,0);ok(c)};im.onerror=()=>no({userMsg:"這張照片讀不了。"});im.src=u})}
+function ocrLoad(){return window.Tesseract?Promise.resolve():new Promise((ok,no)=>{const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";s.onload=ok;s.onerror=()=>no({userMsg:"載入辨識元件失敗，請確認有網路後再試。"});document.head.appendChild(s)})}
+async function ocrRun(f,prompt,ui){
+  ui.status("載入辨識元件…第一次要下載約十幾 MB，請稍等");
+  await ocrLoad();
+  const c=await ocrPrep(f);
+  const r=await Tesseract.recognize(c,"eng",{logger:m=>{if(m.status==="recognizing text")ui.status("辨識中 "+Math.round(m.progress*100)+"%")}});
+  const txt=r.data.text;ui.note(txt);
+  const o=ocrParse(txt,ui.today());
+  if(!o.lines.length)throw {userMsg:"認不出品項。請把收據攤平、光線均勻再拍一次，或改用「用其他 AI」。"};
+  return JSON.stringify(o);
 }
 
 /* ---------- 自己的 AI 金鑰（選用，只存在這支手機）---------- */
@@ -606,6 +674,7 @@ function mountRc(){
     subs:()=>[...Object.entries(CATS).flatMap(([g,l])=>l.filter(c=>c!=="超市").map(c=>({sub:c,group:g}))),...SUPER.map(x=>({sub:x[0],group:"生活消費"}))],
     today,
     direct:ai.key?{label:"拍收據自動分類（"+AIDEF[ai.provider].n+"）",run:aiRun}:null,
+    directs:[{label:"免金鑰拍照（手機辨識，較不準）",run:ocrRun}],
     settings:aiSettings,
     save:async(info,ls)=>{let n=0;ls.forEach((l,i)=>{const g=(Object.entries(CATS).find(([g,li])=>li.includes(l.sub))||[])[0]||"生活消費";
       const rec={date:info.date,amt:Math.round(l.amount*100)/100,group:g,cat:l.sub,note:((info.chain||info.store?(info.chain||info.store)+"：":"")+(l.items||"")).slice(0,60)};
